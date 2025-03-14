@@ -8,6 +8,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 	"go.opentelemetry.io/auto/internal/pkg/structfield"
 )
 
@@ -19,6 +20,7 @@ type Manifest struct {
 	// StructFields are struct fields the application should contain that need
 	// offsets to be found.
 	StructFields []structfield.ID
+	Funcs        []funcfield.ID
 }
 
 func (m Manifest) validate() error {

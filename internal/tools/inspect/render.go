@@ -19,6 +19,7 @@ import (
 //go:embed templates/golang.org/x/net/*.tmpl
 //go:embed templates/google.golang.org/grpc/*.tmpl
 //go:embed templates/net/http/*.tmpl
+//go:embed templates/crypto/tls/*.tmpl
 //go:embed templates/runtime/*.tmpl
 //go:embed templates/go.opentelemetry.io/otel/traceglobal/*.tmpl
 //go:embed templates/github.com/segmentio/kafka-go/*.tmpl
@@ -48,7 +49,7 @@ func NewRenderer(l *slog.Logger, src string, f fs.FS) Renderer {
 // All src will be rendered in the same file-tree with the same names (except
 // for any ".tmpl" suffixes) as found in the Renderer's fs.FS.
 func (r Renderer) Render(dest string, data interface{}) error {
-	r.log.Debug("rendering...", "src", r.src, "dest", dest, "data", data)
+	r.log.Info("rendering...", "src", r.src, "dest", dest, "data", data)
 
 	tmpls, err := template.ParseFS(r.fs, r.src)
 	if err != nil {
