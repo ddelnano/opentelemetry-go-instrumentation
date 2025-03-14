@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"runtime"
 
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 	"go.opentelemetry.io/auto/internal/pkg/structfield"
 	"go.opentelemetry.io/auto/internal/tools/inspect"
 )
@@ -65,21 +66,67 @@ func manifests() ([]inspect.Manifest, error) {
 		return nil, fmt.Errorf("failed to get \"golang.org/x/net\" versions: %w", err)
 	}
 
-	goOtelVers, err := PkgVersions("go.opentelemetry.io/otel")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get \"go.opentelemetry.io/otel\" versions: %w", err)
-	}
-
-	kafkaGoVers, err := PkgVersions("github.com/segmentio/kafka-go")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get \"github.com/segmentio/kafka-go\" versions: %w", err)
-	}
-
 	ren := func(src string) inspect.Renderer {
 		return inspect.NewRenderer(logger, src, inspect.DefaultFS)
 	}
 
 	return []inspect.Manifest{
+		{
+			Application: inspect.Application{
+				Renderer:  ren("templates/crypto/tls/*.tmpl"),
+				GoVerions: goVers,
+			},
+			Funcs: []funcfield.ID{
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Read",
+					Arg:     "c",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Read",
+					Arg:     "b",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Read",
+					Arg:     "~r0",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Read",
+					Arg:     "~r1",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Write",
+					Arg:     "c",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Write",
+					Arg:     "b",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Write",
+					Arg:     "~r0",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "crypto/tls",
+					Func:    "(*Conn).Write",
+					Arg:     "~r1",
+				},
+			},
+		},
 		{
 			Application: inspect.Application{
 				Renderer:  ren("templates/runtime/*.tmpl"),
@@ -96,36 +143,95 @@ func manifests() ([]inspect.Manifest, error) {
 				GoVerions: goVers,
 			},
 			StructFields: []structfield.ID{
-				structfield.NewID("std", "net/http", "Request", "Method"),
-				structfield.NewID("std", "net/http", "Request", "URL"),
-				structfield.NewID("std", "net/http", "Request", "RemoteAddr"),
-				structfield.NewID("std", "net/http", "Request", "Header"),
-				structfield.NewID("std", "net/http", "Request", "ctx"),
-				structfield.NewID("std", "net/http", "Response", "StatusCode"),
-				structfield.NewID("std", "net/http", "response", "req"),
-				structfield.NewID("std", "net/http", "response", "status"),
-				structfield.NewID("std", "net/http", "Request", "Proto"),
-				structfield.NewID("std", "net/http", "Request", "RequestURI"),
-				structfield.NewID("std", "net/http", "Request", "Host"),
-				structfield.NewID("std", "net/http", "Request", "Pattern"),
-				structfield.NewID("std", "net/http", "Request", "pat"),
-				structfield.NewID("std", "net/http", "pattern", "str"),
-				structfield.NewID("std", "net/url", "URL", "Path"),
-				structfield.NewID("std", "net/url", "URL", "Scheme"),
-				structfield.NewID("std", "net/url", "URL", "Opaque"),
-				structfield.NewID("std", "net/url", "URL", "User"),
-				structfield.NewID("std", "net/url", "URL", "RawPath"),
-				structfield.NewID("std", "net/url", "URL", "OmitHost"),
-				structfield.NewID("std", "net/url", "URL", "ForceQuery"),
-				structfield.NewID("std", "net/url", "URL", "RawQuery"),
-				structfield.NewID("std", "net/url", "URL", "Fragment"),
-				structfield.NewID("std", "net/url", "URL", "RawFragment"),
-				structfield.NewID("std", "net/url", "URL", "Host"),
-				structfield.NewID("std", "net/url", "Userinfo", "username"),
-				structfield.NewID("std", "bufio", "Writer", "buf"),
-				structfield.NewID("std", "bufio", "Writer", "n"),
-				structfield.NewID("std", "net", "TCPAddr", "IP"),
-				structfield.NewID("std", "net", "TCPAddr", "Port"),
+
+				// Added for Pixie's TLS tracing
+				structfield.NewID("std", "internal/poll", "FD", "Sysfd"),
+				structfield.NewID("std", "crypto/tls", "Conn", "conn"),
+				structfield.NewID("std", "net/http", "http2serverConn", "conn"),
+				structfield.NewID("std", "net/http", "http2serverConn", "hpackEncoder"),
+				structfield.NewID("std", "net/http", "http2HeadersFrame", "http2FrameHeader"),
+				structfield.NewID("std", "net/http", "http2FrameHeader", "Type"),
+				structfield.NewID("std", "net/http", "http2FrameHeader", "Flags"),
+				structfield.NewID("std", "net/http", "http2FrameHeader", "StreamID"),
+				structfield.NewID("std", "net/http", "http2DataFrame", "data"),
+				structfield.NewID("std", "net/http", "http2writeResHeaders", "streamID"),
+				structfield.NewID("std", "net/http", "http2writeResHeaders", "endStream"),
+				structfield.NewID("std", "net/http", "http2MetaHeadersFrame", "http2HeadersFrame"),
+				structfield.NewID("std", "net/http", "http2MetaHeadersFrame", "Fields"),
+				structfield.NewID("std", "net/http", "http2Framer", "w"),
+				structfield.NewID("std", "net/http", "http2bufferedWriter", "w"),
+			},
+		},
+		{
+			Application: inspect.Application{
+				Renderer:  ren("templates/net/http/*.tmpl"),
+				GoVerions: goVers,
+			},
+			Funcs: []funcfield.ID{
+				// net/http.(*http2Framer).WriteDataPadded
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "f",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "streamID",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "endStream",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "data",
+				},
+				// net/http.(*http2Framer).checkFrameOrder
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).checkFrameOrder",
+					Arg:     "fr",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).checkFrameOrder",
+					Arg:     "f",
+				},
+				// net/http.(*http2writeResHeaders).writeFrame
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2writeResHeaders).writeFrame",
+					Arg:     "w",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2writeResHeaders).writeFrame",
+					Arg:     "ctx",
+				},
+				// net/http.(*http2serverConn).processHeaders
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2serverConn).processHeaders",
+					Arg:     "sc",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2serverConn).processHeaders",
+					Arg:     "f",
+				},
 			},
 		},
 		{
@@ -134,90 +240,77 @@ func manifests() ([]inspect.Manifest, error) {
 				Versions: grpcVers,
 			},
 			StructFields: []structfield.ID{
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"Stream",
-					"method",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"Stream",
-					"id",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"Stream",
-					"ctx",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"ServerStream",
-					"Stream",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc",
-					"ClientConn",
-					"target",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"http2Client",
-					"nextID",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"headerFrame",
-					"streamID",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"headerFrame",
-					"hf",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/status",
-					"Error",
-					"s",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/status",
-					"Status",
-					"s",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/genproto/googleapis/rpc/status",
-					"Status",
-					"Code",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/genproto/googleapis/rpc/status",
-					"Status",
-					"Message",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/internal/transport",
-					"http2Server",
-					"peer",
-				),
-				structfield.NewID(
-					"google.golang.org/grpc",
-					"google.golang.org/grpc/peer",
-					"Peer",
-					"LocalAddr",
-				),
+
+				// Added for Pixie's GRPC tracing
+				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "http2Server", "conn"),
+				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "http2Client", "conn"),
+				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "loopyWriter", "framer"),
+
+				// Added for Pixie's TLS tracing
+				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "bufWriter", "conn"),
+
+				// TODO(ddelnano): This field is optional and when added to the offsetgen I'm not able to see the offsets be found.
+				// This may require adding this field to the templated application for it to work.
+				structfield.NewID("google.golang.org", "google.golang.org/grpc/credentials/internal", "syscallConn", "conn"),
+			},
+		},
+		{
+			Application: inspect.Application{
+				Renderer: ren("templates/google.golang.org/grpc/*.tmpl"),
+				Versions: grpcVers,
+			},
+			Funcs: []funcfield.ID{
+				// google.golang.org/grpc/internal/transport.(*http2Server).operateHeaders
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Server).operateHeaders",
+					Arg:     "t",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Server).operateHeaders",
+					Arg:     "frame",
+				},
+				// google.golang.org/grpc/internal/transport.(*http2Client).operateHeaders
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Client).operateHeaders",
+					Arg:     "t",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Client).operateHeaders",
+					Arg:     "frame",
+				},
+				// google.golang.org/grpc/internal/transport.(*loopyWriter).writeHeader
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "l",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "streamID",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "endStream",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "hf",
+				},
 			},
 		},
 		{
@@ -226,136 +319,79 @@ func manifests() ([]inspect.Manifest, error) {
 				Versions: xNetVers,
 			},
 			StructFields: []structfield.ID{
-				structfield.NewID(
-					"golang.org/x/net",
-					"golang.org/x/net/http2",
-					"MetaHeadersFrame",
-					"Fields",
-				),
-				structfield.NewID(
-					"golang.org/x/net",
-					"golang.org/x/net/http2",
-					"FrameHeader",
-					"StreamID",
-				),
+				// Upstream but needed by Pixie's GRPC tracing
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "MetaHeadersFrame", "Fields"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "StreamID"),
+
+				// Added for Pixie's GRPC tracing
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Name"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Value"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Value"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "MetaHeadersFrame", "HeadersFrame"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "HeadersFrame", "FrameHeader"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Type"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Flags"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"),
 			},
 		},
 		{
 			Application: inspect.Application{
-				Renderer: ren("templates/go.opentelemetry.io/otel/traceglobal/*.tmpl"),
-				Versions: goOtelVers,
+				Renderer: ren("templates/golang.org/x/net/*.tmpl"),
+				Versions: xNetVers,
 			},
-			StructFields: []structfield.ID{
-				structfield.NewID(
-					"go.opentelemetry.io/otel",
-					"go.opentelemetry.io/otel/internal/global",
-					"tracer",
-					"delegate",
-				),
-				structfield.NewID(
-					"go.opentelemetry.io/otel",
-					"go.opentelemetry.io/otel/internal/global",
-					"tracer",
-					"name",
-				),
-				structfield.NewID(
-					"go.opentelemetry.io/otel",
-					"go.opentelemetry.io/otel/internal/global",
-					"tracer",
-					"provider",
-				),
-				structfield.NewID(
-					"go.opentelemetry.io/otel",
-					"go.opentelemetry.io/otel/internal/global",
-					"tracerProvider",
-					"tracers",
-				),
-				structfield.NewID(
-					"go.opentelemetry.io/otel",
-					"go.opentelemetry.io/otel/trace",
-					"SpanContext",
-					"traceID",
-				),
-				structfield.NewID(
-					"go.opentelemetry.io/otel",
-					"go.opentelemetry.io/otel/trace",
-					"SpanContext",
-					"spanID",
-				),
-				structfield.NewID(
-					"go.opentelemetry.io/otel",
-					"go.opentelemetry.io/otel/trace",
-					"SpanContext",
-					"traceFlags",
-				),
-			},
-		},
-		{
-			Application: inspect.Application{
-				Renderer: ren("templates/github.com/segmentio/kafka-go/*.tmpl"),
-				Versions: kafkaGoVers,
-			},
-			StructFields: []structfield.ID{
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Message",
-					"Topic",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Message",
-					"Partition",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Message",
-					"Offset",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Message",
-					"Key",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Message",
-					"Headers",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Message",
-					"Time",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Writer",
-					"Topic",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Reader",
-					"config",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"ReaderConfig",
-					"GroupID",
-				),
-				structfield.NewID(
-					"github.com/segmentio/kafka-go",
-					"github.com/segmentio/kafka-go",
-					"Conn",
-					"clientID",
-				),
+			Funcs: []funcfield.ID{
+				// golang.org/x/net/http2.(*Framer).WriteDataPadded
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "f",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "streamID",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "endStream",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "data",
+				},
+				// golang.org/x/net/http2.(*Framer).checkFrameOrder
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).checkFrameOrder",
+					Arg:     "fr",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).checkFrameOrder",
+					Arg:     "f",
+				},
+				// golang.org/x/net/http2/hpack.(*Encoder).WriteField
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2/hpack",
+					Func:    "(*Encoder).WriteField",
+					Arg:     "e",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2/hpack",
+					Func:    "(*Encoder).WriteField",
+					Arg:     "f",
+				},
 			},
 		},
 	}, nil
