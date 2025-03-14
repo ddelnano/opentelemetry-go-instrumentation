@@ -51,6 +51,14 @@ func TestDWARFFunctionOffsets(t *testing.T) {
 		t.Fatalf("Argument 'b' not found")
 	}
 
+	if _, ok := args["~r0"]; !ok {
+		t.Fatalf("Argument 'retval0' not found")
+	}
+
+	if _, ok := args["~r1"]; !ok {
+		t.Fatalf("Argument 'retval0' not found")
+	}
+
 	expectedArgC := ArgInfo{
 		TypeInfo: TypeInfo{
 			VarType:  Pointer,
@@ -89,4 +97,46 @@ func TestDWARFFunctionOffsets(t *testing.T) {
 	}
 	argB := args["b"]
 	assert.Equal(t, expectedArgB, argB, "Argument 'b' does not match expected value")
+	// I20250314 14:41:45.260408    12 dwarf_reader.cc:958] crypto/tls.(*Conn).Write arg: ~r0
+	// I20250314 14:41:45.260432    12 dwarf_reader.cc:982] type_info=[type=kBaseType decl_type=int type_name=int] location=[type=kRegister offset=0 registers=[kRAX]] retarg=true
+	// I20250314 14:41:45.260442    12 dwarf_reader.cc:958] crypto/tls.(*Conn).Write arg: ~r0
+	// I20250314 14:41:45.260448    12 dwarf_reader.cc:958] crypto/tls.(*Conn).Write arg: ~r1
+	// I20250314 14:41:45.260504    12 dwarf_reader.cc:982] type_info=[type=kStruct decl_type=error type_name=runtime.iface] location=[type=kRegister offset=8 registers=[kRBX,kRCX]] retarg=true
+
+	expectedR0 := ArgInfo{
+		TypeInfo: TypeInfo{
+			VarType:  BaseType,
+			TypeName: "int",
+			DeclType: "int",
+		},
+		Location: VarLocation{
+			LocType: Register,
+			Offset:  0,
+			Regs: []RegisterName{
+				kRAX,
+			},
+		},
+		RetArg: true,
+	}
+	r0 := args["~r0"]
+	assert.Equal(t, expectedR0, r0, "Expected ~r0 to be %v, but got %v", expectedR0, r0)
+
+	expectedR1 := ArgInfo{
+		TypeInfo: TypeInfo{
+			VarType:  Struct,
+			TypeName: "runtime.iface",
+			DeclType: "error",
+		},
+		Location: VarLocation{
+			LocType: Register,
+			Offset:  8,
+			Regs: []RegisterName{
+				kRBX,
+				kRCX,
+			},
+		},
+		RetArg: true,
+	}
+	r1 := args["~r1"]
+	assert.Equal(t, expectedR1, r1, "Expected ~r1 to be %v, but got %v", expectedR1, r1)
 }
