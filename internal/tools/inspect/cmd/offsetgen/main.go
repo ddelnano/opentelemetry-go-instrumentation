@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"runtime"
 
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 	"go.opentelemetry.io/auto/internal/pkg/structfield"
 	"go.opentelemetry.io/auto/internal/tools/inspect"
 )
@@ -85,13 +86,13 @@ func manifests() ([]inspect.Manifest, error) {
 				Renderer:  ren("templates/crypto/tls/*.tmpl"),
 				GoVerions: goVers,
 			},
-			// Funcs: []funcfield.ID{
-			// 	Name:    "crypto/tls.(*Conn).Read",
-			// 	Args:    []string{"c", "b"},
-			// 	RetVals: []int{0, 1},
-			// },
-			StructFields: []structfield.ID{
-				structfield.NewID("std", "crypto/tls", "Conn", "quic"),
+			Funcs: []funcfield.ID{
+				funcfield.ID{
+					Name: "crypto/tls.(*Conn).Read",
+				},
+				funcfield.ID{
+					Name: "crypto/tls.(*Conn).Write",
+				},
 			},
 		},
 		{
@@ -114,6 +115,19 @@ func manifests() ([]inspect.Manifest, error) {
 				// Added for Pixie's TLS tracing
 				structfield.NewID("std", "internal/poll", "FD", "Sysfd"),
 				structfield.NewID("std", "crypto/tls", "Conn", "conn"),
+				structfield.NewID("std", "net/http", "http2serverConn", "conn"),
+				structfield.NewID("std", "net/http", "http2serverConn", "hpackEncoder"),
+				structfield.NewID("std", "net/http", "http2HeadersFrame", "http2FrameHeader"),
+				structfield.NewID("std", "net/http", "http2FrameHeader", "Type"),
+				structfield.NewID("std", "net/http", "http2FrameHeader", "Flags"),
+				structfield.NewID("std", "net/http", "http2FrameHeader", "StreamID"),
+				structfield.NewID("std", "net/http", "http2DataFrame", "data"),
+				structfield.NewID("std", "net/http", "http2writeResHeaders", "streamID"),
+				structfield.NewID("std", "net/http", "http2writeResHeaders", "endStream"),
+				structfield.NewID("std", "net/http", "http2MetaHeadersFrame", "http2HeadersFrame"),
+				structfield.NewID("std", "net/http", "http2MetaHeadersFrame", "Fields"),
+				structfield.NewID("std", "net/http", "http2Framer", "w"),
+				structfield.NewID("std", "net/http", "http2bufferedWriter", "w"),
 			},
 		},
 		{
@@ -149,12 +163,14 @@ func manifests() ([]inspect.Manifest, error) {
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Name"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Value"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Value"),
-				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"), // offsets were not found
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"),
+				// TODO(ddelnano): Offsets are not found for this field.
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "MetaHeadersFrame", "HeadersFrame"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "HeadersFrame", "FrameHeader"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Type"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Flags"),
-				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"), // offsets were not found
+				// TODO(ddelnano): Offsets are not found for this field.
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"),
 			},
 		},
 	}, nil
