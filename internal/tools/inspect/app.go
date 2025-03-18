@@ -15,6 +15,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 	"go.opentelemetry.io/auto/internal/pkg/process"
 	"go.opentelemetry.io/auto/internal/pkg/structfield"
 )
@@ -102,6 +103,11 @@ func (a *app) GetOffset(id structfield.ID) (uint64, bool) {
 	}
 
 	return uint64(v), true
+}
+
+func (a *app) GetFuncArgs(id funcfield.ID) (bool, bool) {
+	a.log.Info("analyzing binary...", "id", id, "binary", a.exec)
+	return true, true
 }
 
 // Close closes the app, releasing all held resources.

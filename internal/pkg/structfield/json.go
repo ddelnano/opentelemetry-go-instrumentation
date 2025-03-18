@@ -3,7 +3,10 @@
 
 package structfield
 
-import "github.com/Masterminds/semver/v3"
+import (
+	"github.com/Masterminds/semver/v3"
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
+)
 
 type jsonOffset struct {
 	Offset   *uint64           `json:"offset"`
@@ -37,6 +40,54 @@ func (jf *jsonField) addOffsets(off *Offsets) {
 	}
 }
 
+type jsonFuncOffset struct {
+	Offset   *uint64            `json:"offset"`
+	Location funcfield.Location `json:"location"`
+	Versions []*semver.Version  `json:"versions"`
+}
+
+type jsonFuncArg struct {
+	Arg     string            `json:"arg"`
+	Offsets []*jsonFuncOffset `json:"offsets"`
+}
+
+func (jf *jsonFuncArg) addOffsets(off *funcfield.Offsets) {
+	var jOff *jsonFuncOffset
+	for o, vers := range off.Index() {
+		if !o.Valid {
+			jOff = find(&jf.Offsets, func(jo *jsonFuncOffset) bool {
+				return jo.Offset == nil
+			})
+			jOff.Offset = nil
+			jOff.Location = funcfield.Unknown
+		} else {
+			jOff = find(&jf.Offsets, func(jo *jsonFuncOffset) bool {
+				return jo.Offset != nil && o.Offset == *jo.Offset
+			})
+			offTmp := o
+			jOff.Offset = &offTmp.Offset
+			jOff.Location = offTmp.Location
+		}
+
+		jOff.Versions = mergeSorted(jOff.Versions, vers, func(a, b *semver.Version) int {
+			return a.Compare(b)
+		})
+	}
+}
+
+type jsonFunc struct {
+	Func string         `json:"func"`
+	Args []*jsonFuncArg `json:"args"`
+}
+
+func (jf *jsonFunc) addOffsets(arg string, off *funcfield.Offsets) {
+	jfa := find(&jf.Args, func(jfa *jsonFuncArg) bool {
+		return arg == jfa.Arg
+	})
+	jfa.Arg = arg
+	jfa.addOffsets(off)
+}
+
 type jsonStruct struct {
 	Struct string       `json:"struct"`
 	Fields []*jsonField `json:"fields"`
@@ -53,6 +104,7 @@ func (js *jsonStruct) addOffsets(field string, off *Offsets) {
 type jsonPackage struct {
 	Package string        `json:"package"`
 	Structs []*jsonStruct `json:"structs"`
+	Funcs   []*jsonFunc   `json:"funcs"`
 }
 
 func (jp *jsonPackage) addOffsets(strct, field string, off *Offsets) {
@@ -61,6 +113,14 @@ func (jp *jsonPackage) addOffsets(strct, field string, off *Offsets) {
 	})
 	js.Struct = strct
 	js.addOffsets(field, off)
+}
+
+func (jp *jsonPackage) addFuncOffsets(fn, arg string, off *funcfield.Offsets) {
+	jf := find(&jp.Funcs, func(s *jsonFunc) bool {
+		return fn == s.Func
+	})
+	jf.Func = fn
+	jf.addOffsets(arg, off)
 }
 
 type jsonModule struct {
@@ -74,6 +134,14 @@ func (jm *jsonModule) addOffsets(pkg, strct, field string, off *Offsets) {
 	})
 	jp.Package = pkg
 	jp.addOffsets(strct, field, off)
+}
+
+func (jm *jsonModule) addFuncOffsets(pkg, fn, arg string, off *funcfield.Offsets) {
+	jp := find(&jm.Packages, func(p *jsonPackage) bool {
+		return pkg == p.Package
+	})
+	jp.Package = pkg
+	jp.addFuncOffsets(fn, arg, off)
 }
 
 // find returns the value in slice where f evaluates to true. If none exists a

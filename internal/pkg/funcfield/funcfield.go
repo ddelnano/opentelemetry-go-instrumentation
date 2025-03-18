@@ -1,93 +1,183 @@
 package funcfield
 
-// LocationType defines where an argument is stored.
-// type LocationType string
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"sync"
 
-// const (
-// 	LocationStack    LocationType = "stack"
-// 	LocationRegister LocationType = "register"
-// )
-
-// // OffsetKey represents a function argument or return value offset.
-// type OffsetKey struct {
-// 	Offset uint64 `json:"offset"`
-// 	Valid  bool   `json:"valid"`
-// 	// Loc    LocationType `json:"location"` // "stack" or "register"
-// 	Loc string
-// }
+	"github.com/Masterminds/semver/v3"
+)
 
 // // ID identifies a function argument or return value.
 type ID struct {
-	Name    string // Module path
-	Args    []string
-	Retvals []int
+	// ModPath is the module path containing the struct field package.
+	//
+	// If set to "std", the struct field belongs to the standard Go library.
+	ModPath string
+	// PkgPath package import path containing the struct field.
+	PkgPath string
+	// Struct is the name of the struct containing the field.
+	Func string
+	// Field is the field name.
+	Arg string
 }
 
-// type uniqueOffset struct {
-// 	value uint64
-// 	valid bool
-// 	loc   string // Added: Track "stack" or "register"
-// }
+// NewID returns a new ID using pkg for the PkgPath, strct for the Struct, and
+// field for the Field.
+func NewID(mod, pkg, fn, arg string) ID {
+	return ID{ModPath: mod, PkgPath: pkg, Func: fn, Arg: arg}
+}
 
-// // Offsets holds byte offsets for function arguments and return values.
-// type Offsets struct {
-// 	mu     sync.RWMutex
-// 	values map[verKey]offsetVersion
-// 	uo     uniqueOffset
-// }
+type UniqueOffset struct {
+	Value    uint64
+	Location Location
+	Valid    bool
+}
 
-// // NewOffsets initializes an empty Offsets structure.
-// func NewOffsets() *Offsets {
-// 	return &Offsets{values: make(map[verKey]offsetVersion)}
-// }
+// Offsets holds byte offsets for function arguments and return values.
+type Offsets struct {
+	Mu     sync.RWMutex
+	Values map[VerKey]OffsetVersion
+	Ua     UniqueOffset
+}
 
-// // Get retrieves an offset and location for a given version.
-// func (o *Offsets) Get(ver *semver.Version) (OffsetKey, bool) {
-// 	if o == nil {
-// 		return OffsetKey{}, false
-// 	}
-// 	o.mu.RLock()
-// 	v, ok := o.values[newVerKey(ver)]
-// 	o.mu.RUnlock()
+func (o *Offsets) GetLatest() (OffsetKey, VerKey) {
+	o.Mu.RLock()
+	defer o.Mu.RUnlock()
 
-// 	if strings.HasPrefix(ver.String(), "0.0.0") && !ok && o.uo.valid {
-// 		return OffsetKey{Offset: o.uo.value, Valid: true, Loc: o.uo.loc}, true
-// 	}
+	latestVersion := VerKey{}
+	val := OffsetKey{}
+	for verKey, ov := range o.Values {
+		// TODO(ddelnano): Add check for Location
+		if verKey.GreaterThan(latestVersion) && ov.Offset.Valid {
+			latestVersion = verKey
+			val = ov.Offset
+		}
+	}
 
-// 	return v.offset, ok
-// }
+	return val, latestVersion
+}
+
+func (o *Offsets) Index() map[OffsetKey][]*semver.Version {
+	o.Mu.RLock()
+	defer o.Mu.RUnlock()
+
+	out := make(map[OffsetKey][]*semver.Version)
+	for _, ov := range o.Values {
+		vers, ok := out[ov.Offset]
+		if ok {
+			i := sort.Search(len(vers), func(i int) bool {
+				return vers[i].GreaterThanEqual(ov.Version)
+			})
+			vers = append(vers, nil)
+			copy(vers[i+1:], vers[i:])
+			vers[i] = ov.Version
+		} else {
+			vers = append(vers, ov.Version)
+		}
+		out[ov.Offset] = vers
+	}
+	return out
+}
+
+func (v VerKey) GreaterThan(other VerKey) bool {
+	return v.Version.GreaterThan(&other.Version)
+}
+
+// NewOffsets initializes an empty Offsets structure.
+func NewOffsets() *Offsets {
+	return &Offsets{Values: make(map[VerKey]OffsetVersion)}
+}
+
+// Get retrieves an offset and location for a given version.
+func (o *Offsets) Get(ver *semver.Version) (OffsetKey, bool) {
+	if o == nil {
+		return OffsetKey{}, false
+	}
+	o.Mu.RLock()
+	v, ok := o.Values[NewVerKey(ver)]
+	o.Mu.RUnlock()
+
+	// TODO(ddelnano): Probably need to check location here for Stack or Registers as well
+	if strings.HasPrefix(ver.String(), "0.0.0") && !ok && o.Ua.Valid {
+		return OffsetKey{Offset: o.Ua.Value, Valid: true, Location: o.Ua.Location}, true
+	}
+
+	return v.Offset, ok
+}
 
 // // Put stores an offset and location type for a given version.
-// func (o *Offsets) Put(ver *semver.Version, offset OffsetKey) {
-// 	ov := offsetVersion{offset: offset, version: ver}
-// 	o.mu.Lock()
-// 	defer o.mu.Unlock()
+func (o *Offsets) Put(ver *semver.Version, offset OffsetKey) {
+	ov := OffsetVersion{Offset: offset, Version: ver}
+	o.Mu.Lock()
+	defer o.Mu.Unlock()
 
-// 	if o.values == nil {
-// 		o.values = map[verKey]offsetVersion{newVerKey(ver): ov}
-// 		o.uo.valid = ov.offset.Valid
-// 		o.uo.value = ov.offset.Offset
-// 		o.uo.loc = ov.offset.Loc
-// 		return
-// 	}
+	if o.Values == nil {
+		o.Values = map[VerKey]OffsetVersion{NewVerKey(ver): ov}
+		o.Ua.Valid = ov.Offset.Valid
+		o.Ua.Value = ov.Offset.Offset
+		o.Ua.Location = ov.Offset.Location
+		return
+	}
 
-// 	o.values[newVerKey(ver)] = ov
-// 	if o.uo.valid && (o.uo.value != ov.offset.Offset || o.uo.loc != ov.offset.Loc) {
-// 		o.uo.valid = false
-// 	}
-// }
+	o.Values[NewVerKey(ver)] = ov
+	if o.Ua.Valid && (o.Ua.Value != ov.Offset.Offset || o.Ua.Location != ov.Offset.Location) {
+		o.Ua.Valid = false
+	}
+}
 
 // // Struct for version comparison.
-// type verKey struct {
-// 	semver.Version
-// }
+type VerKey struct {
+	semver.Version
+}
 
-// func newVerKey(v *semver.Version) verKey {
-// 	stripped := semver.New(v.Major(), v.Minor(), v.Patch(), v.Prerelease(), v.Metadata())
-// 	return verKey{Version: *stripped}
-// }
+func NewVerKey(v *semver.Version) VerKey {
+	stripped := semver.New(v.Major(), v.Minor(), v.Patch(), v.Prerelease(), v.Metadata())
+	return VerKey{Version: *stripped}
+}
 
-// type offsetVersion struct {
-// 	offset  OffsetKey
-// 	version *semver.Version
-// }
+type Location int
+
+const (
+	Unknown   Location = iota
+	Stack     Location = iota
+	Registers Location = iota
+)
+
+func (l *Location) UnmarshalJSON(data []byte) error {
+	switch string(data) {
+	case `"stack"`:
+		*l = Stack
+	case `"registers"`:
+		*l = Registers
+	case `"unknown"`:
+		*l = Unknown
+	default:
+		return errors.New(fmt.Sprintf("invalid location %s", string(data)))
+	}
+	return nil
+}
+
+func (l *Location) MarshalJSON() ([]byte, error) {
+	if *l == Unknown {
+		return []byte(`"unknown"`), nil
+	} else if *l == Stack {
+		return []byte(`"stack"`), nil
+	} else if *l == Registers {
+		return []byte(`"registers"`), nil
+	}
+	return nil, errors.New(fmt.Sprintf("invalid location %d", *l))
+}
+
+type OffsetKey struct {
+	Offset   uint64
+	Location Location
+	Valid    bool
+}
+
+type OffsetVersion struct {
+	Offset  OffsetKey
+	Version *semver.Version
+}

@@ -12,12 +12,15 @@ import (
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 )
 
 // Index holds all struct field offsets.
 type Index struct {
-	dataMu sync.RWMutex
-	data   map[ID]*Offsets
+	dataMu  sync.RWMutex
+	data    map[ID]*Offsets
+	funcsMu sync.RWMutex
+	funcs   map[funcfield.ID]*funcfield.Offsets
 }
 
 // NewIndex returns a new empty Index.
@@ -34,8 +37,20 @@ func (i *Index) Get(id ID) (*Offsets, bool) {
 	return i.get(id)
 }
 
+func (i *Index) GetFunc(id funcfield.ID) (*funcfield.Offsets, bool) {
+	i.funcsMu.RLock()
+	defer i.funcsMu.RUnlock()
+
+	return i.getfunc(id)
+}
+
 func (i *Index) get(id ID) (*Offsets, bool) {
 	o, ok := i.data[id]
+	return o, ok
+}
+
+func (i *Index) getfunc(id funcfield.ID) (*funcfield.Offsets, bool) {
+	o, ok := i.funcs[id]
 	return o, ok
 }
 
@@ -63,6 +78,18 @@ func (i *Index) GetLatestOffset(id ID) (OffsetKey, *semver.Version) {
 	return off, &ver.Version
 }
 
+func (i *Index) GetLatestFuncOffset(id funcfield.ID) (funcfield.OffsetKey, *semver.Version) {
+	i.funcsMu.RLock()
+	defer i.funcsMu.RUnlock()
+
+	offs, ok := i.getfunc(id)
+	if !ok {
+		return funcfield.OffsetKey{}, nil
+	}
+	off, ver := offs.GetLatest()
+	return off, &ver.Version
+}
+
 func (i *Index) getOffset(id ID, ver *semver.Version) (OffsetKey, bool) {
 	offs, ok := i.get(id)
 	if !ok {
@@ -87,6 +114,10 @@ func (i *Index) put(id ID, offsets *Offsets) {
 	i.data[id] = offsets
 }
 
+func (i *Index) putfunc(id funcfield.ID, offsets *funcfield.Offsets) {
+	i.funcs[id] = offsets
+}
+
 // PutOffset stores the offset value for version ver of id within the Index i.
 //
 // This will update any existing offsets stored for id with offset. If ver
@@ -107,6 +138,22 @@ func (i *Index) putOffset(id ID, ver *semver.Version, offset uint64, valid bool)
 	off.Put(ver, OffsetKey{Offset: offset, Valid: valid})
 }
 
+func (i *Index) PutFuncOffset(id funcfield.ID, ver *semver.Version, offset uint64, location funcfield.Location, valid bool) {
+	i.dataMu.Lock()
+	defer i.dataMu.Unlock()
+
+	i.putFuncOffset(id, ver, offset, location, valid)
+}
+
+func (i *Index) putFuncOffset(id funcfield.ID, ver *semver.Version, offset uint64, location funcfield.Location, valid bool) {
+	off, ok := i.getfunc(id)
+	if !ok {
+		off = funcfield.NewOffsets()
+		i.putfunc(id, off)
+	}
+	off.Put(ver, funcfield.OffsetKey{Offset: offset, Location: location, Valid: valid})
+}
+
 // UnmarshalJSON unmarshals the offset JSON data into i.
 func (i *Index) UnmarshalJSON(data []byte) error {
 	var mods []*jsonModule
@@ -116,6 +163,7 @@ func (i *Index) UnmarshalJSON(data []byte) error {
 	}
 
 	m := make(map[ID]*Offsets)
+	fnMap := make(map[funcfield.ID]*funcfield.Offsets)
 
 	for _, mod := range mods {
 		for _, p := range mod.Packages {
@@ -145,12 +193,43 @@ func (i *Index) UnmarshalJSON(data []byte) error {
 					}
 				}
 			}
+
+			for _, f := range p.Funcs {
+				for _, arg := range f.Args {
+					for _, o := range arg.Offsets {
+						for _, v := range o.Versions {
+							key := funcfield.ID{
+								ModPath: mod.Module,
+								PkgPath: p.Package,
+								Func:    f.Func,
+								Arg:     arg.Arg,
+							}
+
+							off, ok := fnMap[key]
+							if !ok {
+								off = new(funcfield.Offsets)
+								fnMap[key] = off
+							}
+
+							if o.Offset == nil {
+								off.Put(v, funcfield.OffsetKey{Valid: false})
+							} else {
+								off.Put(v, funcfield.OffsetKey{Offset: *o.Offset, Location: o.Location, Valid: true})
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
 	i.dataMu.Lock()
 	i.data = m
 	i.dataMu.Unlock()
+
+	i.funcsMu.Lock()
+	i.funcs = fnMap
+	i.funcsMu.Unlock()
 
 	return nil
 }
@@ -167,6 +246,14 @@ func (i *Index) MarshalJSON() ([]byte, error) {
 		})
 		jm.Module = id.ModPath
 		jm.addOffsets(id.PkgPath, id.Struct, id.Field, off)
+	}
+
+	for id, off := range i.funcs {
+		jm := find(&out, func(p *jsonModule) bool {
+			return id.ModPath == p.Module
+		})
+		jm.Module = id.ModPath
+		jm.addFuncOffsets(id.PkgPath, id.Func, id.Arg, off)
 	}
 
 	// Ensure repeatability by sorting.
@@ -191,6 +278,27 @@ func (i *Index) MarshalJSON() ([]byte, error) {
 			sort.Slice(p.Structs, func(i, j int) bool {
 				return p.Structs[i].Struct < p.Structs[j].Struct
 			})
+
+			for _, f := range p.Funcs {
+				for _, arg := range f.Args {
+					// TODO(ddelnano): Args need to be sorted by name and location
+					sort.Slice(arg.Offsets, func(i, j int) bool {
+						if arg.Offsets[i].Offset == nil {
+							return true
+						}
+						if arg.Offsets[j].Offset == nil {
+							return false
+						}
+						return *arg.Offsets[i].Offset < *arg.Offsets[j].Offset
+					})
+					sort.Slice(f.Args, func(i, j int) bool {
+						return f.Args[i].Arg < f.Args[j].Arg
+					})
+				}
+				sort.Slice(p.Funcs, func(i, j int) bool {
+					return p.Funcs[i].Func < p.Funcs[j].Func
+				})
+			}
 		}
 		sort.Slice(m.Packages, func(i, j int) bool {
 			return m.Packages[i].Package < m.Packages[j].Package
@@ -199,7 +307,6 @@ func (i *Index) MarshalJSON() ([]byte, error) {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Module < out[j].Module
 	})
-
 	return json.Marshal(out)
 }
 

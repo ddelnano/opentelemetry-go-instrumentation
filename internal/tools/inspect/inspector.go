@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/client"
 	"golang.org/x/sync/errgroup"
 
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 	"go.opentelemetry.io/auto/internal/pkg/structfield"
 )
 
@@ -79,11 +80,15 @@ func (i *Inspector) AddManifest(manifest Manifest) error {
 		b := newBuilder(i.log, i.client, nil)
 		for _, ver := range manifest.Application.Versions {
 			v := ver
+			if len(manifest.StructFields) > 0 && len(manifest.Funcs) > 0 {
+				return errors.New("cannot use both struct fields and function fields in the same manifest")
+			}
 			i.jobs = append(i.jobs, job{
 				Renderer: manifest.Application.Renderer,
 				Builder:  b,
 				AppVer:   v,
 				Fields:   manifest.StructFields,
+				Funcs:    manifest.Funcs,
 			})
 		}
 		return nil
@@ -92,11 +97,15 @@ func (i *Inspector) AddManifest(manifest Manifest) error {
 	if manifest.Application.Versions == nil {
 		for _, gVer := range goVer {
 			v := gVer
+			if len(manifest.StructFields) > 0 && len(manifest.Funcs) > 0 {
+				return errors.New("cannot use both struct fields and function fields in the same manifest")
+			}
 			i.jobs = append(i.jobs, job{
 				Renderer: manifest.Application.Renderer,
 				Builder:  newBuilder(i.log, i.client, v),
 				AppVer:   v,
 				Fields:   manifest.StructFields,
+				Funcs:    manifest.Funcs,
 			})
 		}
 		return nil
@@ -106,11 +115,15 @@ func (i *Inspector) AddManifest(manifest Manifest) error {
 		b := newBuilder(i.log, i.client, gV)
 		for _, ver := range manifest.Application.Versions {
 			v := ver
+			if len(manifest.StructFields) > 0 && len(manifest.Funcs) > 0 {
+				return errors.New("cannot use both struct fields and function fields in the same manifest")
+			}
 			i.jobs = append(i.jobs, job{
 				Renderer: manifest.Application.Renderer,
 				Builder:  b,
 				AppVer:   v,
 				Fields:   manifest.StructFields,
+				Funcs:    manifest.Funcs,
 			})
 		}
 	}
@@ -122,6 +135,12 @@ type job struct {
 	Builder  *builder
 	AppVer   *semver.Version
 	Fields   []structfield.ID
+	Funcs    []funcfield.ID
+}
+
+type result struct {
+	structs []stResult
+	fns     []fnResult
 }
 
 // Do performs the inspections and returns all found offsets.
@@ -141,7 +160,7 @@ func (i *Inspector) Do(ctx context.Context) (*structfield.Index, error) {
 		return nil
 	})
 
-	c := make(chan []result)
+	c := make(chan result)
 	for n := 0; n < max(1, i.NWorkers-1); n++ {
 		g.Go(func() error {
 			for m := range todo {
@@ -166,10 +185,15 @@ func (i *Inspector) Do(ctx context.Context) (*structfield.Index, error) {
 
 	index := structfield.NewIndex()
 	for results := range c {
-		for _, r := range results {
+		for _, r := range results.structs {
 			i.logResult(r)
 
 			index.PutOffset(r.StructField, r.Version, r.Offset, r.Valid)
+		}
+		for _, r := range results.fns {
+			i.logFuncResult(r)
+
+			index.PutFuncOffset(r.FuncField, r.Version, r.Offset, r.Location, r.Valid)
 		}
 	}
 
@@ -179,30 +203,56 @@ func (i *Inspector) Do(ctx context.Context) (*structfield.Index, error) {
 	return index, nil
 }
 
-type result struct {
+type stResult struct {
 	StructField structfield.ID
+	FuncField   funcfield.ID
+	Location    funcfield.Location
 	Version     *semver.Version
 	Offset      uint64
 	// Valid is true if the offset is valid for the struct field at the specified version.
 	Valid bool
 }
 
-func (i *Inspector) do(ctx context.Context, j job) (out []result, err error) {
-	var uncachedIndices []int
+type fnResult struct {
+	FuncField funcfield.ID
+	Location  funcfield.Location
+	Version   *semver.Version
+	Offset    uint64
+	// Valid is true if the offset is valid for the struct field at the specified version.
+	Valid bool
+}
+
+func (i *Inspector) do(ctx context.Context, j job) (out result, err error) {
+	var uncachedStructIndices []int
+	var uncachedFuncIndices []int
 	for _, f := range j.Fields {
 		o, ok := i.Cache.GetOffset(j.AppVer, f)
-		out = append(out, result{
+		out.structs = append(out.structs, stResult{
 			StructField: f,
 			Version:     j.AppVer,
 			Offset:      o.Offset,
 			Valid:       o.Valid,
 		})
 		if !ok {
-			uncachedIndices = append(uncachedIndices, len(out)-1)
+			uncachedStructIndices = append(uncachedStructIndices, len(out.structs)-1)
 		}
 	}
 
-	if len(uncachedIndices) == 0 {
+	// TODO(ddelnano): Add caching later if its warranted
+	for _, _ = range j.Funcs {
+		// _, ok := i.Cache.GetFuncArgs(j.AppVer, f)
+		// out = append(out, result{
+		// 	StructField: f,
+		// 	Version:     j.AppVer,
+		// 	Offset:      o.Offset,
+		// 	Valid:       o.Valid,
+		// })
+		// if !ok {
+		// 	uncachedFuncIndices = append(uncachedFuncIndices, len(out)-1)
+		// }
+		uncachedFuncIndices = append(uncachedFuncIndices, len(j.Funcs))
+	}
+	if len(uncachedStructIndices) == 0 && len(uncachedFuncIndices) == 0 {
 		return out, nil
 	}
 
@@ -220,20 +270,36 @@ func (i *Inspector) do(ctx context.Context, j job) (out []result, err error) {
 		)
 		return out, nil
 	} else if err != nil {
-		return nil, err
+		return out, err
 	}
 	defer app.Close()
 
-	for _, i := range uncachedIndices {
-		out[i].Offset, out[i].Valid = app.GetOffset(out[i].StructField)
+	for _, i := range uncachedStructIndices {
+		out.structs[i].Offset, out.structs[i].Valid = app.GetOffset(out.structs[i].StructField)
 	}
+
+	// 	for _, i := range uncachedFuncIndices {
+	// 		out.fns[i].Offset, out.fns[i].Valid = app.GetFuncArgs(out.fns[i].StructField)
+	// 	}
 
 	return out, nil
 }
 
-func (i *Inspector) logResult(r result) {
+func (i *Inspector) logResult(r stResult) {
 	msg := "offset "
 	kv := []interface{}{"version", r.Version, "id", r.StructField}
+	if !r.Valid {
+		msg += "not found"
+	} else {
+		msg += "found"
+		kv = append(kv, "offset", r.Offset)
+	}
+	i.log.Info(msg, kv...)
+}
+
+func (i *Inspector) logFuncResult(r fnResult) {
+	msg := "offset "
+	kv := []interface{}{"version", r.Version, "id", r.FuncField, "location", r.Location}
 	if !r.Valid {
 		msg += "not found"
 	} else {
