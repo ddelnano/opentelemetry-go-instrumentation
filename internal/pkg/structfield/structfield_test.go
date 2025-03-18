@@ -13,6 +13,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 )
 
 var (
@@ -68,6 +69,51 @@ func TestOffsets(t *testing.T) {
 	assert.Equal(t, OffsetKey{Offset: 2, Valid: true}, off, "invalid update value for 1.2.0")
 }
 
+func TestFuncOffsets(t *testing.T) {
+	var o funcfield.Offsets
+
+	off, ok := o.Get(v120)
+	assert.False(t, ok, "empty offsets found value")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 0, Valid: false}, off, "empty offset value")
+
+	o.Put(v120, funcfield.OffsetKey{Offset: 1, Valid: true})
+	o.Put(v121, funcfield.OffsetKey{Offset: 2, Valid: true})
+	o.Put(v130, funcfield.OffsetKey{Offset: 0, Valid: false})
+
+	off, ok = o.Get(v120)
+	assert.True(t, ok, "did not get 1.2.0")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 1, Valid: true}, off, "invalid value for 1.2.0")
+
+	off, ok = o.Get(v12)
+	assert.True(t, ok, "did not get 1.2")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 1, Valid: true}, off, "invalid value for 1.2")
+
+	off, ok = o.Get(v130)
+	assert.True(t, ok, "did not get 1.3.0")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 0, Valid: false}, off, "invalid value for 1.3.0")
+
+	_, ok = o.Get(v110)
+	assert.False(t, ok, "found value for 1.1.0")
+
+	off, ok = o.Get(v121)
+	assert.True(t, ok, "did not get 1.2.1")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 2, Valid: true}, off, "invalid value for 1.2.1")
+
+	off, ver := o.GetLatest()
+	assert.Equal(t, v121, &ver.Version, "invalid version for latest")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 2, Valid: true}, off, "invalid value for latest")
+
+	o.Put(v120, funcfield.OffsetKey{Offset: 1, Valid: true})
+	off, ok = o.Get(v120)
+	assert.True(t, ok, "did not get 1.2.0 after reset")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 1, Valid: true}, off, "invalid reset value for 1.2.0")
+
+	o.Put(v120, funcfield.OffsetKey{Offset: 2, Valid: true})
+	off, ok = o.Get(v120)
+	assert.True(t, ok, "did not get 1.2.0 after update")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 2, Valid: true}, off, "invalid update value for 1.2.0")
+}
+
 var index = &Index{
 	data: map[ID]*Offsets{
 		NewID("std", "net/http", "Request", "Method"): {
@@ -99,6 +145,40 @@ var index = &Index{
 				newVerKey(v120): {offset: OffsetKey{Offset: 0, Valid: true}, version: v120},
 			},
 			uo: uniqueOffset{value: 0, valid: true},
+		},
+	},
+	funcs: map[funcfield.ID]*funcfield.Offsets{
+		funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "c"): {
+			Ua: funcfield.UniqueOffset{Value: 0, Location: funcfield.Registers, Valid: true},
+			Values: map[funcfield.VerKey]funcfield.OffsetVersion{
+				funcfield.NewVerKey(v120): {Offset: funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, Version: v120},
+				funcfield.NewVerKey(v121): {Offset: funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, Version: v121},
+				funcfield.NewVerKey(v130): {Offset: funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, Version: v130},
+			},
+		},
+		funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "b"): {
+			Ua: funcfield.UniqueOffset{Value: 8, Location: funcfield.Registers, Valid: true},
+			Values: map[funcfield.VerKey]funcfield.OffsetVersion{
+				funcfield.NewVerKey(v120): {Offset: funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, Version: v120},
+				funcfield.NewVerKey(v121): {Offset: funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, Version: v121},
+				funcfield.NewVerKey(v130): {Offset: funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, Version: v130},
+			},
+		},
+		funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "~r0"): {
+			Ua: funcfield.UniqueOffset{Value: 0, Location: funcfield.Registers, Valid: true},
+			Values: map[funcfield.VerKey]funcfield.OffsetVersion{
+				funcfield.NewVerKey(v120): {Offset: funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, Version: v120},
+				funcfield.NewVerKey(v121): {Offset: funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, Version: v121},
+				funcfield.NewVerKey(v130): {Offset: funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, Version: v130},
+			},
+		},
+		funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "~r1"): {
+			Ua: funcfield.UniqueOffset{Value: 8, Location: funcfield.Registers, Valid: true},
+			Values: map[funcfield.VerKey]funcfield.OffsetVersion{
+				funcfield.NewVerKey(v120): {Offset: funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, Version: v120},
+				funcfield.NewVerKey(v121): {Offset: funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, Version: v121},
+				funcfield.NewVerKey(v130): {Offset: funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, Version: v130},
+			},
 		},
 	},
 }
@@ -144,4 +224,20 @@ func TestGetLatestOffsetFromIndex(t *testing.T) {
 	off, ver = index.GetLatestOffset(NewID("google.golang.org/grpc", "google.golang.org/grpc", "ClientConn", "target"))
 	assert.Equal(t, v120, ver, "invalid version for ClientConn.target")
 	assert.Equal(t, OffsetKey{Offset: 0, Valid: true}, off, "invalid value for ClientConn.target")
+
+	funcOff, ver := index.GetLatestFuncOffset(funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "c"))
+	assert.Equal(t, v130, ver, "invalid version for crypto/tls.(*Conn).Read.c")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, funcOff, "invalid value for crypto/tls.(*Conn).Read.c")
+
+	funcOff, ver = index.GetLatestFuncOffset(funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "b"))
+	assert.Equal(t, v130, ver, "invalid version for crypto/tls.(*Conn).Read.b")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, funcOff, "invalid value for crypto/tls.(*Conn).Read.b")
+
+	funcOff, ver = index.GetLatestFuncOffset(funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "~r0"))
+	assert.Equal(t, v130, ver, "invalid version for crypto/tls.(*Conn).Read.~r0")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 0, Location: funcfield.Registers, Valid: true}, funcOff, "invalid value for crypto/tls.(*Conn).Read.~r0")
+
+	funcOff, ver = index.GetLatestFuncOffset(funcfield.NewID("std", "crypto/tls", "(*Conn).Read", "~r1"))
+	assert.Equal(t, v130, ver, "invalid version for crypto/tls.(*Conn).Read.~r1")
+	assert.Equal(t, funcfield.OffsetKey{Offset: 8, Location: funcfield.Registers, Valid: true}, funcOff, "invalid value for crypto/tls.(*Conn).Read.~r1")
 }
