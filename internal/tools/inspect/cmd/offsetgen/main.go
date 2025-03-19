@@ -174,6 +174,100 @@ func manifests() ([]inspect.Manifest, error) {
 		},
 		{
 			Application: inspect.Application{
+				Renderer: ren("templates/net/http/*.tmpl"),
+				Versions: xNetVers,
+			},
+			Funcs: []funcfield.ID{
+				// This should be in the golang.org section, but the demo app needs to be tweaked.
+				// hpack.(*Encoder).WriteField
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "vendor/golang.org/x/net/http2/hpack",
+					Func:    "(*Encoder).WriteField",
+					Arg:     "e",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "vendor/golang.org/x/net/http2/hpack",
+					Func:    "(*Encoder).WriteField",
+					Arg:     "f",
+				},
+			},
+		},
+		{
+			Application: inspect.Application{
+				Renderer:  ren("templates/net/http/*.tmpl"),
+				GoVerions: goVers,
+			},
+			Funcs: []funcfield.ID{
+				// net/http.(*http2Framer).WriteDataPadded
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "f",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "streamID",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "endStream",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).WriteDataPadded",
+					Arg:     "data",
+				},
+				// net/http.(*http2Framer).checkFrameOrder
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).checkFrameOrder",
+					Arg:     "fr",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2Framer).checkFrameOrder",
+					Arg:     "f",
+				},
+				// net/http.(*http2writeResHeaders).writeFrame
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2writeResHeaders).writeFrame",
+					Arg:     "w",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2writeResHeaders).writeFrame",
+					Arg:     "ctx",
+				},
+				// net/http.(*http2serverConn).processHeaders
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2serverConn).processHeaders",
+					Arg:     "sc",
+				},
+				funcfield.ID{
+					ModPath: "std",
+					PkgPath: "net/http",
+					Func:    "(*http2serverConn).processHeaders",
+					Arg:     "f",
+				},
+			},
+		},
+		{
+			Application: inspect.Application{
 				Renderer: ren("templates/google.golang.org/grpc/*.tmpl"),
 				Versions: grpcVers,
 			},
@@ -183,12 +277,90 @@ func manifests() ([]inspect.Manifest, error) {
 				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "http2Server", "conn"),
 				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "http2Client", "conn"),
 				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "loopyWriter", "framer"),
-				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "bufWriter", "conn"),
 
 				// Added for Pixie's TLS tracing
 				// TODO(ddelnano): This field is optional and when added to the offsetgen I'm not able to see the offsets be found.
 				// This may require adding this field to the templated application for it to work.
 				structfield.NewID("google.golang.org", "google.golang.org/grpc/credentials/internal", "syscallConn", "conn"),
+			},
+		},
+		{
+			Application: inspect.Application{
+				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
+				Versions: grpcVers,
+			},
+			Funcs: []funcfield.ID{
+				// google.golang.org/grpc/internal/transport.(*http2Server).operateHeaders
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Server).operateHeaders",
+					Arg:     "t",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Server).operateHeaders",
+					Arg:     "frame",
+				},
+				// google.golang.org/grpc/internal/transport.(*http2Client).operateHeaders
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Client).operateHeaders",
+					Arg:     "t",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*http2Client).operateHeaders",
+					Arg:     "frame",
+				},
+				// google.golang.org/grpc/internal/transport.(*loopyWriter).writeHeader
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "l",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "streamID",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "endStream",
+				},
+				funcfield.ID{
+					ModPath: "google.golang.org/grpc",
+					PkgPath: "google.golang.org/grpc/internal/transport",
+					Func:    "(*loopyWriter).writeHeader",
+					Arg:     "hf",
+				},
+			},
+		},
+		{
+			Application: inspect.Application{
+				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
+				Versions: grpcVers,
+			},
+			StructFields: []structfield.ID{
+				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "bufWriter", "conn"),
+			},
+		},
+		{
+			Application: inspect.Application{
+				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
+				Versions: xNetVers,
+			},
+			StructFields: []structfield.ID{
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"),
+				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "bufWriter", "conn"),
 			},
 		},
 		{
@@ -205,14 +377,71 @@ func manifests() ([]inspect.Manifest, error) {
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Name"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Value"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2/hpack", "HeaderField", "Value"),
-				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"),
-				// TODO(ddelnano): Offsets are not found for this field.
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "MetaHeadersFrame", "HeadersFrame"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "HeadersFrame", "FrameHeader"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Type"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Flags"),
 				// TODO(ddelnano): Offsets are not found for this field.
-				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"),
+			},
+		},
+		{
+			Application: inspect.Application{
+				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
+				Versions: xNetVers,
+			},
+			Funcs: []funcfield.ID{
+				// golang.org/x/net/http2.(*Framer).WriteDataPadded
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "f",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "streamID",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "endStream",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).WriteDataPadded",
+					Arg:     "data",
+				},
+				// golang.org/x/net/http2.(*Framer).checkFrameOrder
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).checkFrameOrder",
+					Arg:     "fr",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2",
+					Func:    "(*Framer).checkFrameOrder",
+					Arg:     "f",
+				},
+				// golang.org/x/net/http2/hpack.(*Encoder).WriteField
+				// TODO(ddelnano): Offsets are not found for this field.
+				// funcfield.ID{
+				// 	ModPath: "golang.org/x/net",
+				// 	PkgPath: "golang.org/x/net/http2",
+				// 	Func:    "(*Encoder).WriteField",
+				// 	Arg:     "e",
+				// },
+				// funcfield.ID{
+				// 	ModPath: "golang.org/x/net",
+				// 	PkgPath: "golang.org/x/net/http2",
+				// 	Func:    "(*Encoder).WriteField",
+				// 	Arg:     "f",
+				// },
 			},
 		},
 	}, nil

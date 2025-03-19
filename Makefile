@@ -62,8 +62,11 @@ $(TOOLS)/synclibbpf: PACKAGE=go.opentelemetry.io/auto/$(TOOLS_MOD_DIR)/synclibbp
 CROSSLINK = $(TOOLS)/crosslink
 $(TOOLS)/crosslink: PACKAGE=go.opentelemetry.io/build-tools/crosslink
 
+# Compiled in the Pixie repo via `bazel build //src/stirling/binaries:go_func_dwarf_dump`
+DWARF_READER_DUMPER = internal/tools/inspect/go_func_dwarf_dump
+
 .PHONY: tools
-tools: $(GOLICENSES) $(MULTIMOD) $(GOLANGCI_LINT) $(DBOTCONF) $(OFFSETGEN) $(SYNCLIBBPF) $(CROSSLINK)
+tools: $(GOLICENSES) $(MULTIMOD) $(GOLANGCI_LINT) $(DBOTCONF) $(OFFSETGEN) $(SYNCLIBBPF) $(CROSSLINK) $(DWARF_READER_DUMPER)
 
 TEST_TARGETS := test-verbose test-ebpf test-race
 .PHONY: $(TEST_TARGETS) test

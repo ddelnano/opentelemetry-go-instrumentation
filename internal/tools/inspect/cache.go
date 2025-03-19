@@ -10,6 +10,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
+	"go.opentelemetry.io/auto/internal/pkg/funcfield"
 	"go.opentelemetry.io/auto/internal/pkg/structfield"
 )
 
@@ -42,6 +43,22 @@ func newCache(l *slog.Logger) *Cache {
 // GetOffset returns the cached offset key and true for the id at the specified
 // version is found in the cache. If the cache does not contain a valid offset for the provided
 // values, 0 and false are returned.
+func (c *Cache) GetFuncOffset(ver *semver.Version, id funcfield.ID) (funcfield.OffsetKey, bool) {
+	if c.data == nil {
+		return funcfield.OffsetKey{}, false
+	}
+
+	off, ok := c.data.GetFunc(id, ver)
+	msg := "cache "
+	if ok {
+		msg += "hit"
+	} else {
+		msg += "miss"
+	}
+	c.log.Info(msg, "version", ver, "id", id)
+	return off, ok
+}
+
 func (c *Cache) GetOffset(ver *semver.Version, id structfield.ID) (structfield.OffsetKey, bool) {
 	if c.data == nil {
 		return structfield.OffsetKey{}, false

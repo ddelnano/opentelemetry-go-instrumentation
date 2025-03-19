@@ -8,6 +8,8 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"errors"
+	"fmt"
+	"log"
 	"log/slog"
 	"os"
 
@@ -58,10 +60,16 @@ func newApp(ctx context.Context, l *slog.Logger, j job) (*app, error) {
 		return nil, err
 	}
 
-	if len(j.Fields) == 0 {
+	if len(j.Fields) == 0 && len(j.Funcs) == 0 {
 		return nil, errors.New("no fields to analyze")
 	}
-	modName := j.Fields[0].ModPath
+	var modName string
+	if len(j.Fields) > 0 {
+
+		modName = j.Fields[0].ModPath
+	} else {
+		modName = j.Funcs[0].ModPath
+	}
 
 	a.exec, err = j.Builder.Build(ctx, a.tmpDir, a.AppVer, modName)
 	if err != nil {
@@ -83,7 +91,7 @@ func newApp(ctx context.Context, l *slog.Logger, j job) (*app, error) {
 	return a, nil
 }
 
-// GetOffset returnst the struct field offset for sf. It uses the DWARF data
+// GetOffset returns the struct field offset for sf. It uses the DWARF data
 // of the app's built binary to find this value.
 func (a *app) GetOffset(id structfield.ID) (uint64, bool) {
 	a.log.Debug("analyzing binary...", "id", id, "binary", a.exec)
@@ -103,12 +111,35 @@ func (a *app) GetOffset(id structfield.ID) (uint64, bool) {
 	return uint64(v), true
 }
 
-func (a *app) GetFuncArgs(id funcfield.ID) (bool, bool) {
+func (a *app) GetFuncFieldArgs(fn string) map[string]process.FuncFieldArg {
+	d := process.DWARF{Reader: a.data.Reader()}
+	result, err := d.GoFuncFieldArgs(fn)
+	if err != nil {
+		a.log.Error("failed to get func field args", "error", err, "fn", fn)
+		return nil
+	}
+
+	return result
+}
+
+func (a *app) GetFuncArgs(id funcfield.ID) (uint64, funcfield.Location, bool) {
+	log.Println("analyzing binary...", "id", id, "binary", a.exec)
 	a.log.Info("analyzing binary...", "id", id, "binary", a.exec)
-	return true, true
+
+	// TODO(ddelnano): Add mode where this can be tested against Pixie's dwarf reader dumper binary.
+	var result map[string]process.FuncFieldArg = a.GetFuncFieldArgs(fmt.Sprintf("%s.%s", id.PkgPath, id.Func))
+	arg, ok := result[id.Arg]
+
+	if !ok {
+		return 0, funcfield.Unknown, false
+	}
+
+	fmt.Println("Found arg: %v", arg)
+	return arg.Offset, arg.Location, true
 }
 
 // Close closes the app, releasing all held resources.
 func (a *app) Close() error {
-	return os.RemoveAll(a.tmpDir)
+	// return os.RemoveAll(a.tmpDir)
+	return nil
 }

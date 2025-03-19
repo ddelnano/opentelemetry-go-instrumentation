@@ -6,6 +6,7 @@ package inspect
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/Masterminds/semver/v3"
@@ -238,19 +239,19 @@ func (i *Inspector) do(ctx context.Context, j job) (out result, err error) {
 		}
 	}
 
-	// TODO(ddelnano): Add caching later if its warranted
-	for _, _ = range j.Funcs {
-		// _, ok := i.Cache.GetFuncArgs(j.AppVer, f)
-		// out = append(out, result{
-		// 	StructField: f,
-		// 	Version:     j.AppVer,
-		// 	Offset:      o.Offset,
-		// 	Valid:       o.Valid,
-		// })
-		// if !ok {
-		// 	uncachedFuncIndices = append(uncachedFuncIndices, len(out)-1)
-		// }
-		uncachedFuncIndices = append(uncachedFuncIndices, len(j.Funcs))
+	for _, f := range j.Funcs {
+		// TODO(ddelnano): Add caching later if its warranted
+		o, ok := i.Cache.GetFuncOffset(j.AppVer, f)
+		out.fns = append(out.fns, fnResult{
+			FuncField: f,
+			Version:   j.AppVer,
+			Offset:    o.Offset,
+			Valid:     o.Valid,
+			Location:  o.Location,
+		})
+		if !ok {
+			uncachedFuncIndices = append(uncachedFuncIndices, len(out.fns)-1)
+		}
 	}
 	if len(uncachedStructIndices) == 0 && len(uncachedFuncIndices) == 0 {
 		return out, nil
@@ -278,9 +279,10 @@ func (i *Inspector) do(ctx context.Context, j job) (out result, err error) {
 		out.structs[i].Offset, out.structs[i].Valid = app.GetOffset(out.structs[i].StructField)
 	}
 
-	// 	for _, i := range uncachedFuncIndices {
-	// 		out.fns[i].Offset, out.fns[i].Valid = app.GetFuncArgs(out.fns[i].StructField)
-	// 	}
+	for _, i := range uncachedFuncIndices {
+		fmt.Printf("uncachedFuncIndices: %d for %+v\n", i, out.fns[i].FuncField)
+		out.fns[i].Offset, out.fns[i].Location, out.fns[i].Valid = app.GetFuncArgs(out.fns[i].FuncField)
+	}
 
 	return out, nil
 }

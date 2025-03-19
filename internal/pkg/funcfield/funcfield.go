@@ -148,10 +148,16 @@ const (
 
 func (l *Location) UnmarshalJSON(data []byte) error {
 	switch string(data) {
+	case `"kStack"`:
+		fallthrough
 	case `"stack"`:
 		*l = Stack
+	case `"kRegister"`:
+		fallthrough
 	case `"registers"`:
 		*l = Registers
+	case `"kUnknown"`:
+		fallthrough
 	case `"unknown"`:
 		*l = Unknown
 	default:
