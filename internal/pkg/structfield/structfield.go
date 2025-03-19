@@ -25,7 +25,7 @@ type Index struct {
 
 // NewIndex returns a new empty Index.
 func NewIndex() *Index {
-	return &Index{data: make(map[ID]*Offsets)}
+	return &Index{data: make(map[ID]*Offsets), funcs: make(map[funcfield.ID]*funcfield.Offsets)}
 }
 
 // Get returns the Offsets and true for an id contained in the Index i. It will
@@ -37,11 +37,11 @@ func (i *Index) Get(id ID) (*Offsets, bool) {
 	return i.get(id)
 }
 
-func (i *Index) GetFunc(id funcfield.ID) (*funcfield.Offsets, bool) {
+func (i *Index) GetFunc(id funcfield.ID, ver *semver.Version) (funcfield.OffsetKey, bool) {
 	i.funcsMu.RLock()
 	defer i.funcsMu.RUnlock()
 
-	return i.getfunc(id)
+	return i.getfuncOffset(id, ver)
 }
 
 func (i *Index) get(id ID) (*Offsets, bool) {
@@ -88,6 +88,14 @@ func (i *Index) GetLatestFuncOffset(id funcfield.ID) (funcfield.OffsetKey, *semv
 	}
 	off, ver := offs.GetLatest()
 	return off, &ver.Version
+}
+
+func (i *Index) getfuncOffset(id funcfield.ID, ver *semver.Version) (funcfield.OffsetKey, bool) {
+	offs, ok := i.getfunc(id)
+	if !ok {
+		return funcfield.OffsetKey{}, false
+	}
+	return offs.Get(ver)
 }
 
 func (i *Index) getOffset(id ID, ver *semver.Version) (OffsetKey, bool) {

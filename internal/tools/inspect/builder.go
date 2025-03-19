@@ -65,7 +65,7 @@ func (b *builder) Build(
 	appV *semver.Version,
 	modName string,
 ) (string, error) {
-	b.log.Debug("building application...", "version", appV, "dir", dir, "image", b.GoImage)
+	b.log.Info("building application...", "version", appV, "dir", dir, "image", b.GoImage)
 
 	app := "app" + appV.Original()
 	goGetCmd := fmt.Sprintf("go get %s@%s", modName, appV.Original())
@@ -83,15 +83,16 @@ func (b *builder) Build(
 	}
 
 	if err := b.runCmd(ctx, []string{"sh", "-c", cmd}, dir); err != nil {
+		fmt.Printf("Build err %v", err)
 		return "", err
 	}
 
-	b.log.Debug("built application", "version", appV, "dir", dir, "image", b.GoImage)
+	b.log.Info("built application", "version", appV, "dir", dir, "image", b.GoImage)
 	return filepath.Join(dir, app), nil
 }
 
 func (b *builder) runCmd(ctx context.Context, cmd []string, dir string) error {
-	b.log.Debug("running command...", "cmd", cmd, "dir", dir, "image", b.GoImage)
+	b.log.Info("running command...", "cmd", cmd, "dir", dir, "image", b.GoImage)
 
 	err := b.pullImage(ctx)
 	if err != nil {
