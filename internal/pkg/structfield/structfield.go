@@ -289,7 +289,8 @@ func (i *Index) MarshalJSON() ([]byte, error) {
 
 			for _, f := range p.Funcs {
 				for _, arg := range f.Args {
-					// TODO(ddelnano): Args need to be sorted by name and location
+					// TODO(ddelnano): Args should ideally be sorted by the dwarf.TagFormalParameter
+					// position from within the dwarf.TagSubroutineType
 					sort.Slice(arg.Offsets, func(i, j int) bool {
 						if arg.Offsets[i].Offset == nil {
 							return true
@@ -299,14 +300,14 @@ func (i *Index) MarshalJSON() ([]byte, error) {
 						}
 						return *arg.Offsets[i].Offset < *arg.Offsets[j].Offset
 					})
-					sort.Slice(f.Args, func(i, j int) bool {
-						return f.Args[i].Arg < f.Args[j].Arg
-					})
 				}
-				sort.Slice(p.Funcs, func(i, j int) bool {
-					return p.Funcs[i].Func < p.Funcs[j].Func
+				sort.Slice(f.Args, func(i, j int) bool {
+					return f.Args[i].Arg < f.Args[j].Arg
 				})
 			}
+			sort.Slice(p.Funcs, func(i, j int) bool {
+				return p.Funcs[i].Func < p.Funcs[j].Func
+			})
 		}
 		sort.Slice(m.Packages, func(i, j int) bool {
 			return m.Packages[i].Package < m.Packages[j].Package
