@@ -66,16 +66,6 @@ func manifests() ([]inspect.Manifest, error) {
 		return nil, fmt.Errorf("failed to get \"golang.org/x/net\" versions: %w", err)
 	}
 
-	// 	goOtelVers, err := PkgVersions("go.opentelemetry.io/otel")
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to get \"go.opentelemetry.io/otel\" versions: %w", err)
-	// 	}
-
-	// 	kafkaGoVers, err := PkgVersions("github.com/segmentio/kafka-go")
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to get \"github.com/segmentio/kafka-go\" versions: %w", err)
-	// 	}
-
 	ren := func(src string) inspect.Renderer {
 		return inspect.NewRenderer(logger, src, inspect.DefaultFS)
 	}
@@ -174,28 +164,6 @@ func manifests() ([]inspect.Manifest, error) {
 		},
 		{
 			Application: inspect.Application{
-				Renderer: ren("templates/net/http/*.tmpl"),
-				Versions: xNetVers,
-			},
-			Funcs: []funcfield.ID{
-				// This should be in the golang.org section, but the demo app needs to be tweaked.
-				// hpack.(*Encoder).WriteField
-				funcfield.ID{
-					ModPath: "golang.org/x/net",
-					PkgPath: "vendor/golang.org/x/net/http2/hpack",
-					Func:    "(*Encoder).WriteField",
-					Arg:     "e",
-				},
-				funcfield.ID{
-					ModPath: "golang.org/x/net",
-					PkgPath: "vendor/golang.org/x/net/http2/hpack",
-					Func:    "(*Encoder).WriteField",
-					Arg:     "f",
-				},
-			},
-		},
-		{
-			Application: inspect.Application{
 				Renderer:  ren("templates/net/http/*.tmpl"),
 				GoVerions: goVers,
 			},
@@ -279,6 +247,8 @@ func manifests() ([]inspect.Manifest, error) {
 				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "loopyWriter", "framer"),
 
 				// Added for Pixie's TLS tracing
+				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "bufWriter", "conn"),
+
 				// TODO(ddelnano): This field is optional and when added to the offsetgen I'm not able to see the offsets be found.
 				// This may require adding this field to the templated application for it to work.
 				structfield.NewID("google.golang.org", "google.golang.org/grpc/credentials/internal", "syscallConn", "conn"),
@@ -345,26 +315,6 @@ func manifests() ([]inspect.Manifest, error) {
 		},
 		{
 			Application: inspect.Application{
-				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
-				Versions: grpcVers,
-			},
-			StructFields: []structfield.ID{
-				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "bufWriter", "conn"),
-			},
-		},
-		{
-			Application: inspect.Application{
-				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
-				Versions: xNetVers,
-			},
-			StructFields: []structfield.ID{
-				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"),
-				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"),
-				structfield.NewID("google.golang.org/grpc", "google.golang.org/grpc/internal/transport", "bufWriter", "conn"),
-			},
-		},
-		{
-			Application: inspect.Application{
 				Renderer: ren("templates/golang.org/x/net/*.tmpl"),
 				Versions: xNetVers,
 			},
@@ -381,12 +331,27 @@ func manifests() ([]inspect.Manifest, error) {
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "HeadersFrame", "FrameHeader"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Type"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Flags"),
-				// TODO(ddelnano): Offsets are not found for this field.
 			},
 		},
 		{
 			Application: inspect.Application{
+				// TODO(ddelnano): This application should be merged into golang.org/x/net template
+				// Renderer: ren("templates/golang.org/x/net/*.tmpl"),
 				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
+				Versions: xNetVers,
+			},
+			StructFields: []structfield.ID{
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"),
+				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"),
+			},
+		},
+
+		{
+			Application: inspect.Application{
+				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
+				// TODO(ddelnano): Determine why using golang.org/x/net templates
+				// results in missing offsets. This needs to be investigated.
+				// Renderer: ren("templates/golang.org/x/net/*.tmpl"),
 				Versions: xNetVers,
 			},
 			Funcs: []funcfield.ID{
@@ -429,19 +394,18 @@ func manifests() ([]inspect.Manifest, error) {
 					Arg:     "f",
 				},
 				// golang.org/x/net/http2/hpack.(*Encoder).WriteField
-				// TODO(ddelnano): Offsets are not found for this field.
-				// funcfield.ID{
-				// 	ModPath: "golang.org/x/net",
-				// 	PkgPath: "golang.org/x/net/http2",
-				// 	Func:    "(*Encoder).WriteField",
-				// 	Arg:     "e",
-				// },
-				// funcfield.ID{
-				// 	ModPath: "golang.org/x/net",
-				// 	PkgPath: "golang.org/x/net/http2",
-				// 	Func:    "(*Encoder).WriteField",
-				// 	Arg:     "f",
-				// },
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2/hpack",
+					Func:    "(*Encoder).WriteField",
+					Arg:     "e",
+				},
+				funcfield.ID{
+					ModPath: "golang.org/x/net",
+					PkgPath: "golang.org/x/net/http2/hpack",
+					Func:    "(*Encoder).WriteField",
+					Arg:     "f",
+				},
 			},
 		},
 	}, nil
