@@ -32,10 +32,11 @@ type ArgTracker interface {
 }
 
 // NewArgTracker returns an ArgTracker based on the ABI.
-func NewArgTracker(abi ABI) ArgTracker {
+func NewArgTracker(abi ABI, addrSize int) ArgTracker {
 	if abi == AbiGoReg {
 		return &GoRegABIArgTracker{
 			CurrentStackOffset: 0,
+			AddrSize:           addrSize,
 			IntArgRegs:         []Registers{kRAX, kRBX, kRCX, kRDX, kRSI, kR8, kR9, kR10, kR11},
 			IntRetValRegs:      []Registers{kRAX, kRBX, kRCX, kRDX, kRSI, kR8, kR9, kR10, kR11},
 			FloatArgRegs:       []Registers{kXMM0, kXMM1, kXMM2, kXMM3, kXMM4, kXMM5, kXMM6, kXMM7, kXMM8, kXMM9, kXMM10, kXMM11, kXMM12, kXMM13, kXMM14},
@@ -44,6 +45,7 @@ func NewArgTracker(abi ABI) ArgTracker {
 	} else if abi == AbiGoStack {
 		return &GoStackABIArgTracker{
 			CurrentStackOffset: 0,
+			AddrSize:           addrSize,
 		}
 	} else {
 		return nil
@@ -82,6 +84,7 @@ const (
 )
 
 type GoRegABIArgTracker struct {
+	AddrSize                 int
 	CurrentStackOffset       uint64
 	CurrentIntRegOffset      uint64
 	CurrentFloatRegOffset    uint64
@@ -96,8 +99,6 @@ type GoRegABIArgTracker struct {
 }
 
 func (g *GoRegABIArgTracker) PopLocation(typeClass TypeClass, typeSize uint64, alignmentSize uint64, numVars int, retArg bool) (FuncFieldArg, error) {
-	// TODO(ddelnano): This should be read from the binary. This works for 64 bit binaries until then.
-	var regSize int = 8
 	var regOffset *uint64
 	var registers *[]Registers
 	if typeClass == TypeClassInt {
@@ -124,12 +125,15 @@ func (g *GoRegABIArgTracker) PopLocation(typeClass TypeClass, typeSize uint64, a
 		funcFieldArg.Location = funcfield.Registers
 		funcFieldArg.Offset = *regOffset
 
-		// TODO(ddelnano): Add registers to funcFieldArg
+		// TODO(ddelnano): Consider if its worth tracking which registers belong
+		// to a funcFieldArg. This is done in Pixie's implementation, but is not required
+		// for this uprobe optimization feature set.
+
 		// Pop a register off for each variable in the type.
 		for i := 0; i < numVars; i++ {
 			*registers = (*registers)[1:]
 		}
-		*regOffset += uint64(numVars * regSize)
+		*regOffset += uint64(numVars * g.AddrSize)
 		return funcFieldArg, nil
 	} else {
 		funcFieldArg.Location = funcfield.Stack
@@ -138,6 +142,7 @@ func (g *GoRegABIArgTracker) PopLocation(typeClass TypeClass, typeSize uint64, a
 }
 
 type GoStackABIArgTracker struct {
+	AddrSize           int
 	CurrentStackOffset uint64
 }
 
@@ -149,6 +154,7 @@ func SnapUpToMultiple(x, y uint64) uint64 {
 	return IntRoundDivide(x, y) * y
 }
 
+// TODO(ddelnano): This is yet to be tested. As upstream has never supported these binaries.
 func (g *GoStackABIArgTracker) PopLocation(typeClass TypeClass, typeSize uint64, alignmentSize uint64, numVars int, retArg bool) (FuncFieldArg, error) {
 
 	g.CurrentStackOffset = SnapUpToMultiple(g.CurrentStackOffset, alignmentSize)
@@ -173,7 +179,6 @@ type FuncFieldArg struct {
 	RetArg   bool               `json:"ret_arg"` // true if this is a return argument
 }
 
-// TODO(ddelnano): Reading the go .buildinfo might be easier and would be significantly faster
 func (d DWARF) DetectSourceABI() (ABI, error) {
 	cus, err := d.EntriesWithTag(dwarf.TagCompileUnit)
 	if err != nil || len(cus) == 0 {
@@ -329,8 +334,11 @@ func (d DWARF) GetBaseOrStructTypeByteSize(entry *dwarf.Entry) (uint64, error) {
 func (d DWARF) GetTypeByteSize(entry *dwarf.Entry) (uint64, error) {
 	switch entry.Tag {
 	case dwarf.TagPointerType, dwarf.TagSubroutineType:
-		// TODO(ddelnano): This should be read from DWARF
-		return 8, nil // Assuming 64-bit pointers for simplicity
+		addrSize := d.Reader.AddressSize()
+		if addrSize != 8 && addrSize != 4 {
+			return 0, fmt.Errorf("unsupported address size: %d", addrSize)
+		}
+		return uint64(addrSize), nil
 	case dwarf.TagBaseType, dwarf.TagStructType:
 		return d.GetBaseOrStructTypeByteSize(entry)
 	default:
@@ -341,8 +349,11 @@ func (d DWARF) GetTypeByteSize(entry *dwarf.Entry) (uint64, error) {
 func (d DWARF) GetAlignmentSize(entry *dwarf.Entry) (uint64, error) {
 	switch entry.Tag {
 	case dwarf.TagPointerType, dwarf.TagSubroutineType:
-		// TODO(ddelnano): This should be read from DWARF
-		return 8, nil // Assuming 64-bit pointers for simplicity
+		addrSize := d.Reader.AddressSize()
+		if addrSize != 8 && addrSize != 4 {
+			return 0, fmt.Errorf("unsupported address size: %d", addrSize)
+		}
+		return uint64(addrSize), nil // Assuming 64-bit pointers for simplicity
 	case dwarf.TagBaseType:
 		return d.GetBaseOrStructTypeByteSize(entry)
 	case dwarf.TagStructType:
@@ -419,7 +430,7 @@ func (d DWARF) GoFuncFieldArgs(fn string) (map[string]FuncFieldArg, error) {
 	if err != nil {
 		return nil, err
 	}
-	d.argTracker = NewArgTracker(abi)
+	d.argTracker = NewArgTracker(abi, d.Reader.AddressSize())
 	// Reset the reader to the start of the DWARF data.
 	d.Reader.Seek(0)
 	if !d.GoToEntry(dwarf.TagSubprogram, fn) {
@@ -444,7 +455,7 @@ func (d DWARF) GoFuncFieldArgs(fn string) (map[string]FuncFieldArg, error) {
 
 		argNames = append(argNames, name)
 		isRetArg := d.IsRetArg(entry)
-		// TODO(ddelnano): Must get TYPE DIE and then reset
+		// TODO(ddelnano): Clean up usage of GetTypeDIE and all of the d.Reader.Seek logic
 		offset := entry.Offset
 		typeDie, err := d.GetTypeDIE(entry)
 		if err != nil {
