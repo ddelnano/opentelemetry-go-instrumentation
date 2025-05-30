@@ -50,7 +50,9 @@ func (o *Offsets) GetLatest() (OffsetKey, VerKey) {
 	latestVersion := VerKey{}
 	val := OffsetKey{}
 	for verKey, ov := range o.Values {
-		// TODO(ddelnano): Add check for Location
+		// TODO(ddelnano): This needs to handle differences in the Location as well.
+		// for now this doesn't matter since for the ABIInternal (more recent Go ABI)
+		// would have to pass many arguments to spill over to the stack.
 		if verKey.GreaterThan(latestVersion) && ov.Offset.Valid {
 			latestVersion = verKey
 			val = ov.Offset
@@ -100,7 +102,9 @@ func (o *Offsets) Get(ver *semver.Version) (OffsetKey, bool) {
 	v, ok := o.Values[NewVerKey(ver)]
 	o.Mu.RUnlock()
 
-	// TODO(ddelnano): Probably need to check location here for Stack or Registers as well
+	// TODO(ddelnano): The Location should be checked here. For now this doesn't
+	// matter since for the ABIInternal (more recent Go ABI) would have to pass
+	// many arguments to spill over to the stack.
 	if strings.HasPrefix(ver.String(), "0.0.0") && !ok && o.Ua.Valid {
 		return OffsetKey{Offset: o.Ua.Value, Valid: true, Location: o.Ua.Location}, true
 	}

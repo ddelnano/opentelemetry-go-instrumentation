@@ -240,7 +240,6 @@ func (i *Inspector) do(ctx context.Context, j job) (out result, err error) {
 	}
 
 	for _, f := range j.Funcs {
-		// TODO(ddelnano): Add caching later if its warranted
 		o, ok := i.Cache.GetFuncOffset(j.AppVer, f)
 		out.fns = append(out.fns, fnResult{
 			FuncField: f,
