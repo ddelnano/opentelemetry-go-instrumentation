@@ -18,7 +18,6 @@ import (
 //
 //go:embed templates/golang.org/x/net/*.tmpl
 //go:embed templates/google.golang.org/grpc/*.tmpl
-//go:embed templates/px/google.golang.org/grpc/*.tmpl
 //go:embed templates/net/http/*.tmpl
 //go:embed templates/crypto/tls/*.tmpl
 //go:embed templates/runtime/*.tmpl

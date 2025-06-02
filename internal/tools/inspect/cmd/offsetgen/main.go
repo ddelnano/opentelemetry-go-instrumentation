@@ -256,7 +256,7 @@ func manifests() ([]inspect.Manifest, error) {
 		},
 		{
 			Application: inspect.Application{
-				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
+				Renderer: ren("templates/google.golang.org/grpc/*.tmpl"),
 				Versions: grpcVers,
 			},
 			Funcs: []funcfield.ID{
