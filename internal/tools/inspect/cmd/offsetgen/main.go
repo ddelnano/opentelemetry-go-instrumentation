@@ -331,27 +331,13 @@ func manifests() ([]inspect.Manifest, error) {
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "HeadersFrame", "FrameHeader"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Type"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "FrameHeader", "Flags"),
-			},
-		},
-		{
-			Application: inspect.Application{
-				// TODO(ddelnano): This application should be merged into golang.org/x/net template
-				// Renderer: ren("templates/golang.org/x/net/*.tmpl"),
-				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
-				Versions: xNetVers,
-			},
-			StructFields: []structfield.ID{
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "DataFrame", "data"),
 				structfield.NewID("golang.org/x/net", "golang.org/x/net/http2", "Framer", "w"),
 			},
 		},
-
 		{
 			Application: inspect.Application{
-				Renderer: ren("templates/px/google.golang.org/grpc/*.tmpl"),
-				// TODO(ddelnano): Determine why using golang.org/x/net templates
-				// results in missing offsets. This needs to be investigated.
-				// Renderer: ren("templates/golang.org/x/net/*.tmpl"),
+				Renderer: ren("templates/golang.org/x/net/*.tmpl"),
 				Versions: xNetVers,
 			},
 			Funcs: []funcfield.ID{

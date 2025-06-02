@@ -62,21 +62,18 @@ func TestGoFuncFieldArgs(t *testing.T) {
 			funcName:    "google.golang.org/grpc/internal/transport.(*loopyWriter).writeHeader",
 			expectedErr: nil,
 		},
-		// TODO(ddelnano): This binary was generated from the px/google.golang.org/grpc template
-		// application and is missing some golang.org/x/net/http2 symbols. Use a dedicated
-		// golang.org/x/net application template once the missing symbols are understood.
 		{
-			filename:    "testdata/golang-x-net/appv0.39.0",
+			filename:    "testdata/golang-x-net/appv0.37.0",
 			funcName:    "golang.org/x/net/http2.(*Framer).WriteDataPadded",
 			expectedErr: nil,
 		},
 		{
-			filename:    "testdata/golang-x-net/appv0.39.0",
+			filename:    "testdata/golang-x-net/appv0.37.0",
 			funcName:    "golang.org/x/net/http2.(*Framer).checkFrameOrder",
 			expectedErr: nil,
 		},
 		{
-			filename:    "testdata/golang-x-net/appv0.39.0",
+			filename:    "testdata/golang-x-net/appv0.37.0",
 			funcName:    "golang.org/x/net/http2/hpack.(*Encoder).WriteField",
 			expectedErr: nil,
 		},
