@@ -1,8 +1,29 @@
 package main
 
-import "golang.org/x/net/http2"
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+)
 
 func main() {
-	var mhf http2.MetaHeadersFrame
-	_ = mhf.HeadersEnded()
+	// A trivial handler that reports the protocol that reached it.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello! Path=%s • Protocol=%s\n", r.URL.Path, r.Proto)
+	})
+
+	// Wrap the handler so it speaks h2c (clear-text HTTP/2).
+	h2s := &http2.Server{}
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: h2c.NewHandler(handler, h2s),
+	}
+
+	log.Printf("h2c server listening on http://localhost:8080 …")
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalf("server error: %v", err)
+	}
 }
