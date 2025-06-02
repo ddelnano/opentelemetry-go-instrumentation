@@ -140,6 +140,5 @@ func (a *app) GetFuncArgs(id funcfield.ID) (uint64, funcfield.Location, bool) {
 
 // Close closes the app, releasing all held resources.
 func (a *app) Close() error {
-	// return os.RemoveAll(a.tmpDir)
-	return nil
+	return os.RemoveAll(a.tmpDir)
 }
