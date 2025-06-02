@@ -167,10 +167,33 @@ func (g *GoStackABIArgTracker) PopLocation(typeClass TypeClass, typeSize uint64,
 	}, nil
 }
 
-// DWARF provides convenience in accessing DWARF debugging data.
-type DWARF struct {
+// typeInfo stores pre-computed properties for a DWARF type node.
+type typeInfo struct {
+	size  uint64
+	align uint64
+	class TypeClass
+	nVars int
+}
+
+type DWARF interface {
+	GoFuncFieldArgs(fn string) (map[string]FuncFieldArg, error)
+	GoStructField(id structfield.ID) (int64, error)
+}
+
+func NewDWARF(d *dwarf.Data) DWARF {
+	return dwarfReader{
+		Data:      d,
+		Reader:    d.Reader(),
+		typeCache: make(map[dwarf.Offset]typeInfo),
+	}
+}
+
+// dwarfReader provides convenience in accessing DWARF debugging data.
+type dwarfReader struct {
+	Data       *dwarf.Data
 	Reader     *dwarf.Reader
 	argTracker ArgTracker
+	typeCache  map[dwarf.Offset]typeInfo
 }
 
 type FuncFieldArg struct {
@@ -179,7 +202,7 @@ type FuncFieldArg struct {
 	RetArg   bool               `json:"ret_arg"` // true if this is a return argument
 }
 
-func (d DWARF) DetectSourceABI() (ABI, error) {
+func (d dwarfReader) DetectSourceABI() (ABI, error) {
 	cus, err := d.EntriesWithTag(dwarf.TagCompileUnit)
 	if err != nil || len(cus) == 0 {
 		return AbiUnknown, fmt.Errorf("No compile units found")
@@ -203,7 +226,7 @@ func (d DWARF) DetectSourceABI() (ABI, error) {
 	return abi, nil
 }
 
-func (d DWARF) IsRetArg(die *dwarf.Entry) bool {
+func (d dwarfReader) IsRetArg(die *dwarf.Entry) bool {
 	if f, ok := d.Field(die, dwarf.AttrVarParam); ok {
 		varParam := f.Val.(bool)
 		return varParam
@@ -211,7 +234,7 @@ func (d DWARF) IsRetArg(die *dwarf.Entry) bool {
 	return false
 }
 
-func (d DWARF) GetTypeDIE(entry *dwarf.Entry) (*dwarf.Entry, error) {
+func (d dwarfReader) GetTypeDIE(entry *dwarf.Entry) (*dwarf.Entry, error) {
 	var field dwarf.Field
 	var found bool
 	var err error
@@ -269,162 +292,76 @@ func combineTypeClasses(a, b TypeClass) TypeClass {
 	return a
 }
 
-func (d DWARF) GetTypeClass(entry *dwarf.Entry) (TypeClass, error) {
-	switch entry.Tag {
-	case dwarf.TagPointerType, dwarf.TagSubroutineType:
-		return TypeClassInt, nil
-	case dwarf.TagBaseType:
-		field, ok := d.Field(entry, dwarf.AttrEncoding)
-		if !ok {
-			return TypeClassNone, fmt.Errorf("failed to get encoding attribute: %w", ErrDWARFEntry)
+func (d *dwarfReader) getTypeInfo(t dwarf.Type) (typeInfo, error) {
+	var ti typeInfo
+
+	switch tt := t.(type) {
+	case *dwarf.PtrType, *dwarf.BoolType, *dwarf.FuncType,
+		*dwarf.IntType, *dwarf.UintType:
+		sz := uint64(tt.Size())
+		ti = typeInfo{
+			size:  sz,
+			align: sz,
+			class: TypeClassInt,
+			nVars: 1,
 		}
-		encoding, ok := field.Val.(int64)
-		if !ok {
-			return TypeClassNone, fmt.Errorf("encoding attribute is not a valid string: %w", ErrDWARFEntry)
+
+	case *dwarf.TypedefType:
+		return d.getTypeInfo(tt.Type)
+	case *dwarf.FloatType:
+		sz := uint64(tt.Size())
+		ti = typeInfo{
+			size:  sz,
+			align: sz,
+			class: TypeClassFloat,
+			nVars: 1,
 		}
-		// TODO(ddelnano): Determine how the less common float types should be handled (DW_ATE_complex_float, DW_ATE_imaginary_float, etc.)
-		// 0x04 == DW_ATE_float
-		if encoding == 0x04 {
-			return TypeClassFloat, nil
-		}
-		return TypeClassInt, nil
-	case dwarf.TagStructType:
-		structTypeClass := TypeClassNone
-		for {
-			die, err := d.Reader.Next()
-			if errors.Is(err, io.EOF) || die == nil || die.Tag == 0 {
-				return structTypeClass, nil
-			}
+
+	case *dwarf.StructType:
+		ti.class = TypeClassNone
+		for _, f := range tt.Field {
+			sub, err := d.getTypeInfo(f.Type)
 			if err != nil {
-				return 0, fmt.Errorf("error reading struct members: %w", err)
+				return typeInfo{}, err
 			}
-			if die.Tag == dwarf.TagMember {
-				offset := die.Offset
-				typeDie, err := d.GetTypeDIE(die)
-				if err != nil {
-					return 0, fmt.Errorf("error getting type DIE for member: %w", err)
-				}
-				typeClass, err := d.GetTypeClass(typeDie)
-				if err != nil {
-					return 0, fmt.Errorf("error getting alignment size for member: %w", err)
-				}
-				d.Reader.Seek(offset)
-				d.Reader.Next()
-				structTypeClass = combineTypeClasses(structTypeClass, typeClass)
-			}
+			// Size must cover the highest field end.
+			end := uint64(f.ByteOffset) + sub.size
+			ti.size = max(ti.size, end)
+			ti.align = max(ti.align, sub.align)
+			ti.nVars += sub.nVars
+			ti.class = combineTypeClasses(ti.class, sub.class)
 		}
-		return TypeClassMixed, nil
+		if ti.class == TypeClassNone {
+			ti.class = TypeClassMixed
+		}
+
 	default:
-		return TypeClassNone, fmt.Errorf("unsupported tag for type class: %v", entry.Tag)
+		return typeInfo{}, fmt.Errorf("unsupported dwarf.Type %T", tt)
 	}
+
+	if ti.align == 0 {
+		ti.align = ti.size
+	}
+	return ti, nil
 }
 
-func (d DWARF) GetBaseOrStructTypeByteSize(entry *dwarf.Entry) (uint64, error) {
-	field, ok := d.Field(entry, dwarf.AttrByteSize)
-	if !ok {
-		return 0, fmt.Errorf("failed to get byte size attribute: %w", ErrDWARFEntry)
+// GetTypeInfo converts a DIE offset into size/align/class/var-count information
+// using the high-level *dwarf.Type API (no reader rewinds).
+func (d *dwarfReader) GetTypeInfo(off dwarf.Offset) (typeInfo, error) {
+	if ti, ok := d.typeCache[off]; ok {
+		return ti, nil
 	}
-	byteSize, ok := field.Val.(int64)
-	if !ok {
-		return 0, fmt.Errorf("byte size attribute is not a valid int64: %w", ErrDWARFEntry)
+	t, err := d.Data.Type(off)
+	if err != nil {
+		return typeInfo{}, err
 	}
-	return uint64(byteSize), nil
+
+	ti, err := d.getTypeInfo(t)
+	d.typeCache[off] = ti
+	return ti, err
 }
 
-func (d DWARF) GetTypeByteSize(entry *dwarf.Entry) (uint64, error) {
-	switch entry.Tag {
-	case dwarf.TagPointerType, dwarf.TagSubroutineType:
-		addrSize := d.Reader.AddressSize()
-		if addrSize != 8 && addrSize != 4 {
-			return 0, fmt.Errorf("unsupported address size: %d", addrSize)
-		}
-		return uint64(addrSize), nil
-	case dwarf.TagBaseType, dwarf.TagStructType:
-		return d.GetBaseOrStructTypeByteSize(entry)
-	default:
-		return 0, fmt.Errorf("unsupported tag for byte size: %v %v", entry.Tag, entry)
-	}
-}
-
-func (d DWARF) GetAlignmentSize(entry *dwarf.Entry) (uint64, error) {
-	switch entry.Tag {
-	case dwarf.TagPointerType, dwarf.TagSubroutineType:
-		addrSize := d.Reader.AddressSize()
-		if addrSize != 8 && addrSize != 4 {
-			return 0, fmt.Errorf("unsupported address size: %d", addrSize)
-		}
-		return uint64(addrSize), nil // Assuming 64-bit pointers for simplicity
-	case dwarf.TagBaseType:
-		return d.GetBaseOrStructTypeByteSize(entry)
-	case dwarf.TagStructType:
-		maxSize := uint64(0)
-		for {
-			die, err := d.Reader.Next()
-			if errors.Is(err, io.EOF) || die == nil || die.Tag == 0 {
-				return maxSize, nil
-			}
-			if err != nil {
-				return 0, fmt.Errorf("error reading struct members: %w", err)
-			}
-			if die.Tag == dwarf.TagMember {
-				offset := die.Offset
-				typeDie, err := d.GetTypeDIE(die)
-				if err != nil {
-					return 0, fmt.Errorf("error getting type DIE for member: %w", err)
-				}
-				size, err := d.GetAlignmentSize(typeDie)
-				if err != nil {
-					return 0, fmt.Errorf("error getting alignment size for member: %w", err)
-				}
-				maxSize = max(maxSize, size)
-				d.Reader.Seek(offset)
-				d.Reader.Next()
-			}
-		}
-		return maxSize, nil
-	default:
-		return 0, fmt.Errorf("unsupported tag for alignment size: %v %+v", entry.Tag, entry)
-	}
-}
-
-func (d DWARF) GetNumVars(entry *dwarf.Entry) (int, error) {
-	tag := entry.Tag
-	switch tag {
-	case dwarf.TagPointerType, dwarf.TagSubroutineType, dwarf.TagBaseType:
-		return 1, nil
-	case dwarf.TagStructType:
-		numVars := 0
-		for {
-			die, err := d.Reader.Next()
-			if errors.Is(err, io.EOF) || die == nil || die.Tag == 0 {
-				return numVars, nil
-			}
-			if err != nil {
-				return 0, fmt.Errorf("error reading struct members: %w", err)
-			}
-			if die.Tag == dwarf.TagMember {
-				offset := die.Offset
-				typeDie, err := d.GetTypeDIE(die)
-				if err != nil {
-					return 0, fmt.Errorf("error getting type DIE for member: %w", err)
-				}
-				vars, err := d.GetNumVars(typeDie)
-				if err != nil {
-					return 0, fmt.Errorf("error getting number of variables for member: %w", err)
-				}
-				numVars += vars
-				// The type DIE is not in order, so we must seek back to the struct member DIE
-				d.Reader.Seek(offset)
-				d.Reader.Next() // Reset the reader to the member DIE
-			}
-		}
-		return 0, errors.New("struct types are not implemented yet")
-	default:
-		return 0, errors.New(fmt.Sprintf("unsupported tag: %v", tag))
-	}
-}
-
-func (d DWARF) GoFuncFieldArgs(fn string) (map[string]FuncFieldArg, error) {
+func (d dwarfReader) GoFuncFieldArgs(fn string) (map[string]FuncFieldArg, error) {
 	log.Printf("Searching for function %s in DWARF data\n", fn)
 	abi, err := d.DetectSourceABI()
 	if err != nil {
@@ -454,39 +391,23 @@ func (d DWARF) GoFuncFieldArgs(fn string) (map[string]FuncFieldArg, error) {
 		}
 
 		argNames = append(argNames, name)
+		typeDie, ok := d.Field(entry, dwarf.AttrType)
+		if !ok {
+			return nil, fmt.Errorf("failed to get type attribute for %s: %w", name, ErrDWARFEntry)
+		}
+		typeOffset, ok := typeDie.Val.(dwarf.Offset)
+		if !ok {
+			return nil, fmt.Errorf("type attribute is not a valid dwarf.Offset for %s: %w", name, ErrDWARFEntry)
+		}
+		ti, err := d.GetTypeInfo(typeOffset)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to get type info for %s: %w", name, err)
+		}
+
 		isRetArg := d.IsRetArg(entry)
-		// TODO(ddelnano): Clean up usage of GetTypeDIE and all of the d.Reader.Seek logic
-		offset := entry.Offset
-		typeDie, err := d.GetTypeDIE(entry)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get type DIE for %s: %w", name, err)
-		}
-		typeSize, err := d.GetTypeByteSize(typeDie)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get type size for %s: %w", name, err)
-		}
 
-		typeClass, err := d.GetTypeClass(typeDie)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get type class for %s: %w", name, err)
-		}
-
-		d.Reader.Seek(typeDie.Offset)
-		alignmentSize, err := d.GetAlignmentSize(typeDie)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get alignment size for %s: %w", name, err)
-		}
-
-		d.Reader.Seek(typeDie.Offset)
-		numVars, err := d.GetNumVars(typeDie)
-
-		// Reset to the original position
-		d.Reader.Seek(offset)
-		d.Reader.Next()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get number of variables for %s: %w", name, err)
-		}
-		funcField, err := d.argTracker.PopLocation(typeClass, typeSize, alignmentSize, numVars, isRetArg)
+		funcField, err := d.argTracker.PopLocation(ti.class, ti.size, ti.align, ti.nVars, isRetArg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get location for %s: %w", name, err)
 		}
@@ -498,7 +419,7 @@ func (d DWARF) GoFuncFieldArgs(fn string) (map[string]FuncFieldArg, error) {
 
 // GoStructField returns the offset value of a Go struct field. If the struct
 // field cannot be found -1 and a non-nil error will be returned.
-func (d DWARF) GoStructField(id structfield.ID) (int64, error) {
+func (d dwarfReader) GoStructField(id structfield.ID) (int64, error) {
 	strct := fmt.Sprintf("%s.%s", id.PkgPath, id.Struct)
 	if !d.GoToEntry(dwarf.TagStructType, strct) {
 		return -1, fmt.Errorf("struct %q not found", strct)
@@ -523,12 +444,12 @@ func (d DWARF) GoStructField(id structfield.ID) (int64, error) {
 
 // GoToEntry reads until the entry with a tag equal to name is found. True is
 // returned if the entry is found, otherwise false is returned.
-func (d DWARF) GoToEntry(tag dwarf.Tag, name string) bool {
+func (d dwarfReader) GoToEntry(tag dwarf.Tag, name string) bool {
 	_, err := d.Entry(tag, name)
 	return err == nil
 }
 
-func (d DWARF) EntriesWithTag(tag dwarf.Tag) ([]*dwarf.Entry, error) {
+func (d dwarfReader) EntriesWithTag(tag dwarf.Tag) ([]*dwarf.Entry, error) {
 	entries := make([]*dwarf.Entry, 0)
 	for {
 		entry, err := d.Reader.Next()
@@ -545,7 +466,7 @@ func (d DWARF) EntriesWithTag(tag dwarf.Tag) ([]*dwarf.Entry, error) {
 
 // Entry returns the entry with a tag equal to name. ErrDWARFEntry is returned
 // if the entry cannot be found.
-func (d DWARF) Entry(tag dwarf.Tag, name string) (*dwarf.Entry, error) {
+func (d dwarfReader) Entry(tag dwarf.Tag, name string) (*dwarf.Entry, error) {
 	for {
 		entry, err := d.Reader.Next()
 		if errors.Is(err, io.EOF) || entry == nil {
@@ -566,7 +487,7 @@ func (d DWARF) Entry(tag dwarf.Tag, name string) (*dwarf.Entry, error) {
 // EntryInChildren returns the entry with a tag equal to name within the
 // children of the current entry. ErrDWARFEntry is returned if the entry cannot
 // be found.
-func (d DWARF) EntryInChildren(tag dwarf.Tag, name string) (*dwarf.Entry, error) {
+func (d dwarfReader) EntryInChildren(tag dwarf.Tag, name string) (*dwarf.Entry, error) {
 	for {
 		entry, err := d.Reader.Next()
 		if errors.Is(err, io.EOF) || entry == nil || entry.Tag == 0 {
@@ -586,7 +507,7 @@ func (d DWARF) EntryInChildren(tag dwarf.Tag, name string) (*dwarf.Entry, error)
 
 // Field returns the field from the entry e that has attribute a and true.
 // If no field is found, an empty field is returned with false.
-func (d DWARF) Field(e *dwarf.Entry, a dwarf.Attr) (dwarf.Field, bool) {
+func (d dwarfReader) Field(e *dwarf.Entry, a dwarf.Attr) (dwarf.Field, bool) {
 	for _, f := range e.Field {
 		if f.Attr == a {
 			return f, true

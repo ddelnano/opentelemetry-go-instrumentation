@@ -160,7 +160,7 @@ func FindOffset(id structfield.ID, info *process.Info) (structfield.OffsetKey, e
 		return structfield.OffsetKey{}, err
 	}
 
-	v, err := process.DWARF{Reader: data.Reader()}.GoStructField(id)
+	v, err := process.NewDWARF(data).GoStructField(id)
 	if err != nil {
 		return structfield.OffsetKey{}, err
 	}

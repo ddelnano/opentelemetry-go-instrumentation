@@ -90,7 +90,7 @@ func TestGoFuncFieldArgs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to get DWARF data from %s: %v", tc.filename, err)
 			}
-			dw := DWARF{Reader: dwData.Reader()}
+			dw := NewDWARF(dwData)
 
 			args, err := dw.GoFuncFieldArgs(tc.funcName)
 			if !errors.Is(err, tc.expectedErr) {
