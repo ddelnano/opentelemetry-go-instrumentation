@@ -9,6 +9,9 @@
 .tools/
 **/internal/test/e2e/*/main
 
+# ctags file
+tags
+
 # Python pip cache.
 .cache/
 
