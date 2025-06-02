@@ -98,7 +98,7 @@ func newApp(ctx context.Context, l *slog.Logger, j job) (*app, error) {
 func (a *app) GetOffset(id structfield.ID) (uint64, bool) {
 	a.log.Debug("analyzing binary...", "id", id, "binary", a.exec)
 
-	d := process.DWARF{Reader: a.data.Reader()}
+	d := process.NewDWARF(a.data)
 	v, err := d.GoStructField(id)
 	if err != nil || v < 0 {
 		a.log.Error(
@@ -114,7 +114,7 @@ func (a *app) GetOffset(id structfield.ID) (uint64, bool) {
 }
 
 func (a *app) GetFuncFieldArgs(fn string) map[string]process.FuncFieldArg {
-	d := process.DWARF{Reader: a.data.Reader()}
+	d := process.NewDWARF(a.data)
 	result, err := d.GoFuncFieldArgs(fn)
 	if err != nil {
 		a.log.Error("failed to get func field args", "error", err, "fn", fn)
