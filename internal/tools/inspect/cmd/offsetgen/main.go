@@ -159,7 +159,10 @@ func manifests() ([]inspect.Manifest, error) {
 				structfield.NewID("std", "net/http", "http2MetaHeadersFrame", "http2HeadersFrame"),
 				structfield.NewID("std", "net/http", "http2MetaHeadersFrame", "Fields"),
 				structfield.NewID("std", "net/http", "http2Framer", "w"),
+				// For Go 1.23 and earlier
 				structfield.NewID("std", "net/http", "http2bufferedWriter", "w"),
+				// For Go 1.24 and later
+				structfield.NewID("std", "net/http", "http2bufferedWriter", "conn"),
 			},
 		},
 		{
